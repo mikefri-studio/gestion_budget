@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Solde — Suivi de budget</title>
+  <meta name="description" content="Votre carnet de budget personnel : dépenses, recettes et budgets mensuels.">
+  <meta name="theme-color" content="#0A1411">
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="icon" href="./icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="./icon.svg">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,500;0,9..144,650;1,9..144,500&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+
+  <!-- ══════════ VUE CONNEXION ══════════ -->
+  <div id="view-auth" class="view">
+    <aside class="brand-panel">
+      <div class="brand-mark"><span class="mark-coin">€</span>Solde</div>
+      <h1 class="brand-title">Votre argent,<br><em>en pleine lumière.</em></h1>
+      <p class="brand-sub">Le carnet qui suit vos dépenses, vos recettes et vos budgets — mois après mois, sur tous vos appareils.</p>
+      <ul class="brand-points">
+        <li><b>Suivi clair</b> — chaque euro entré ou sorti, catégorisé.</li>
+        <li><b>Budgets maîtrisés</b> — des plafonds par catégorie, une jauge qui veille.</li>
+        <li><b>Privé &amp; synchronisé</b> — vos données ne sont accessibles que par vous.</li>
+      </ul>
+      <div class="brand-decor" aria-hidden="true">
+        <span class="coin-ring"></span>
+        <span class="coin">€</span>
+        <span class="fl fl1">🥐 −4,20&nbsp;€</span>
+        <span class="fl fl2">💼 +1&nbsp;850&nbsp;€</span>
+        <span class="fl fl3">🚇 −84,50&nbsp;€</span>
+      </div>
+    </aside>
+
+    <main class="auth-side">
+      <div class="auth-card card">
+        <div class="auth-tabs">
+          <button type="button" data-mode="login" class="on">Connexion</button>
+          <button type="button" data-mode="register">Créer un compte</button>
+        </div>
+        <form id="auth-form" novalidate>
+          <label class="lbl">E-mail
+            <input type="email" id="auth-email" required autocomplete="email" placeholder="vous@exemple.fr">
+          </label>
+          <label class="lbl">Mot de passe
+            <input type="password" id="auth-pass" required minlength="6" autocomplete="current-password" placeholder="6 caractères minimum">
+          </label>
+          <p id="auth-error" class="error" hidden></p>
+          <button type="submit" class="btn-primary" id="auth-submit">Se connecter</button>
+        </form>
+        <p id="demo-hint" class="demo-hint" hidden>⚡ <b>Mode démo</b> : Firebase n’est pas encore configuré — vos données restent sur cet appareil. Renseignez <code>firebase-config.js</code> pour activer la synchronisation sécurisée.</p>
+      </div>
+    </main>
+  </div>
+
+  <!-- ══════════ VUE APPLICATION ══════════ -->
+  <div id="view-app" class="view" hidden>
+    <header class="topbar">
+      <div class="brand-mark sm"><span class="mark-coin">€</span>Solde</div>
+      <nav class="month-nav" aria-label="Changer de mois">
+        <button id="m-prev" class="nav-btn" aria-label="Mois précédent">‹</button>
+        <button id="m-label" class="month-label" title="Revenir au mois en cours">…</button>
+        <button id="m-next" class="nav-btn" aria-label="Mois suivant">›</button>
+      </nav>
+      <div class="top-actions">
+        <button id="install-btn" class="btn-ghost sm" hidden>⤓ Installer</button>
+        <span id="user-chip" class="user-chip"></span>
+        <button id="logout-btn" class="btn-ghost sm">Sortir</button>
+      </div>
+    </header>
+    <div id="demo-banner" class="demo-banner" hidden>Mode démo : données stockées localement — configurez Firebase pour la synchronisation.</div>
+
+    <main class="dash">
+      <!-- Solde du mois -->
+      <section class="card hero">
+        <div class="hero-main">
+          <p class="eyebrow">Solde du mois</p>
+          <div class="balance" id="balance" data-v="0">0,00&nbsp;€</div>
+          <div class="pills">
+            <span class="pill in">▼ Entrées&nbsp;<b id="sum-in">0,00&nbsp;€</b></span>
+            <span class="pill out">▲ Sorties&nbsp;<b id="sum-out">0,00&nbsp;€</b></span>
+          </div>
+          <div class="hero-bar">
+            <div class="hero-bar-top"><span>Budget consommé</span><b id="budget-pct">0&nbsp;%</b></div>
+            <div class="bar lg"><i id="budget-bar" data-w="0" style="background:var(--gold)"></i></div>
+          </div>
+        </div>
+        <div class="hero-side">
+          <svg class="gauge" viewBox="0 0 132 132" aria-hidden="true">
+            <circle cx="66" cy="66" r="52" class="g-track"/>
+            <circle cx="66" cy="66" r="52" class="g-prog" id="gauge-ring"/>
+            <text x="66" y="64" text-anchor="middle" class="g-val" id="gauge-txt">0 €</text>
+            <text x="66" y="82" text-anchor="middle" class="g-sub" id="gauge-sub">à dépenser</text>
+          </svg>
+          <div class="stats">
+            <div class="stat"><small>Moy. / jour</small><b id="st-avg">—</b></div>
+            <div class="stat"><small>Plus grosse</small><b id="st-max">—</b></div>
+            <div class="stat"><small>Opérations</small><b id="st-count">0</b></div>
+          </div>
+        </div>
+      </section>
+
+      <div class="columns">
+        <!-- Transactions -->
+        <section class="card tx-card">
+          <div class="sec-head">
+            <h2 class="sec-title">Transactions</h2>
+            <span class="sec-count" id="tx-count"></span>
+          </div>
+          <div id="tx-list"></div>
+        </section>
+
+        <aside class="side">
+          <!-- Ajout rapide -->
+          <section class="card add-card" id="add-card">
+            <div class="sec-head"><h2 class="sec-title">Ajouter</h2></div>
+            <form id="tx-form" autocomplete="off">
+              <div class="seg" id="tx-seg" data-type="depense">
+                <span class="seg-thumb"></span>
+                <button type="button" data-type="depense" class="on">Dépense</button>
+                <button type="button" data-type="recette">Recette</button>
+              </div>
+              <div class="amount-wrap">
+                <input id="tx-amount" inputmode="decimal" placeholder="0,00" aria-label="Montant">
+                <span class="cur">€</span>
+              </div>
+              <div class="cat-row" id="tx-cats"></div>
+              <div class="row2">
+                <input type="date" id="tx-date">
+                <input type="text" id="tx-note" placeholder="Note (facultatif)" maxlength="60">
+              </div>
+              <button class="btn-primary" type="submit">Ajouter l’opération</button>
+            </form>
+          </section>
+
+          <!-- Budgets -->
+          <section class="card budgets-card">
+            <div class="sec-head">
+              <h2 class="sec-title">Budgets</h2>
+              <button class="btn-ghost sm" id="edit-budgets">Modifier</button>
+            </div>
+            <div id="budget-list" class="pad"></div>
+          </section>
+
+          <!-- Répartition -->
+          <section class="card split-card">
+            <div class="sec-head"><h2 class="sec-title">Répartition</h2></div>
+            <div id="split-list" class="pad"></div>
+          </section>
+        </aside>
+      </div>
+    </main>
+
+    <button id="fab" aria-label="Ajouter une opération">+</button>
+  </div>
+
+  <!-- Modal budgets -->
+  <div class="modal-back" id="modal-budgets" hidden>
+    <div class="modal card">
+      <h3 class="sec-title">Budgets mensuels</h3>
+      <p class="modal-sub">Pour chaque catégorie, le montant maximum à dépenser dans le mois.</p>
+      <div id="budget-inputs"></div>
+      <div class="modal-actions">
+        <button class="btn-ghost" id="mb-cancel">Annuler</button>
+        <button class="btn-primary auto" id="mb-save">Enregistrer</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast" hidden></div>
+  <script type="module" src="./app.js"></script>
+</body>
+</html>
