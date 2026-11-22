@@ -1,8 +1,9 @@
-/* ═══════════ Solde — logique applicative ═══════════ */
+/* ═══════════ Solde — logique applicative avec comptes liés ═══════════ */
 import { FIREBASE_CONFIG } from './firebase-config.js';
 
 /* ---------- petits outils ---------- */
 const $ = s => document.querySelector(s);
+const $$ = s => document.querySelectorAll(s);
 const eur = new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format;
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
@@ -52,16 +53,23 @@ if (USE_FIREBASE) {
   }
 }
 
-/* ---------- couche données (Firebase ou local) ---------- */
+/* ---------- couche données (Firebase ou local) avec comptes liés ---------- */
 const store = {
   user: null,
+  currentView: 'self', // 'self' ou email du compte lié
+  linkedAccounts: [], // Comptes liés à cet utilisateur
 
   async init() {
     if (USE_FIREBASE) {
-      return new Promise(res => F.authM.onAuthStateChanged(F.auth, u => { this.user = u; res(u); }));
+      return new Promise(res => F.authM.onAuthStateChanged(F.auth, u => { 
+        this.user = u; 
+        if (u) this.loadLinkedAccounts();
+        res(u); 
+      }));
     }
     const s = localStorage.getItem('solde.session');
     this.user = s ? { email: s } : null;
+    if (this.user) this.loadLinkedAccounts();
     return this.user;
   },
 
@@ -73,7 +81,7 @@ const store = {
       if (pass.length < 6) throw new Error('Mot de passe : 6 caractères minimum.');
       const users = JSON.parse(localStorage.getItem('solde.users') || '{}');
       if (users[email]) throw new Error('Un compte existe déjà avec cet e-mail.');
-      users[email] = { pass: btoa(pass) }; // ⚠️ démo uniquement — la prod utilise Firebase Auth
+      users[email] = { pass: btoa(pass) };
       localStorage.setItem('solde.users', JSON.stringify(users));
       localStorage.setItem('solde.session', email);
       this.user = { email };
@@ -90,36 +98,238 @@ const store = {
       localStorage.setItem('solde.session', email);
       this.user = { email };
     }
+    await this.loadLinkedAccounts();
   },
 
   async logout() {
     if (USE_FIREBASE) await F.authM.signOut(F.auth);
     else localStorage.removeItem('solde.session');
     this.user = null;
+    this.linkedAccounts = [];
+    this.currentView = 'self';
   },
 
   get uid() { return USE_FIREBASE ? this.user.uid : 'local'; },
+  get email() { return this.user.email || 'local'; },
+  get isReadonly() { return this.currentView !== 'self'; },
+  get viewEmail() { return this.currentView === 'self' ? this.email : this.currentView; },
 
-  async loadData() {
+  /* ========== GESTION DES INVITATIONS ========== */
+  
+  async sendInvitation(toEmail, permissions) {
+    if (toEmail === this.email) throw new Error('Vous ne pouvez pas vous inviter vous-même.');
+    
     if (USE_FIREBASE) {
-      const { collection, getDocs, doc, getDoc } = F.fsM;
-      const snap = await getDocs(collection(F.db, 'users', this.uid, 'transactions'));
-      const txs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      const bSnap = await getDoc(doc(F.db, 'users', this.uid, 'meta', 'budgets'));
-      return { txs, budgets: bSnap.exists() ? bSnap.data() : { ...DEFAULT_BUDGETS } };
+      const { collection, addDoc, query, where, getDocs } = F.fsM;
+      
+      // Vérifier si une invitation existe déjà
+      const q = query(
+        collection(F.db, 'invitations'),
+        where('fromEmail', '==', this.email),
+        where('toEmail', '==', toEmail),
+        where('status', '==', 'pending')
+      );
+      const existing = await getDocs(q);
+      if (!existing.empty) throw new Error('Une invitation est déjà en attente pour cet e-mail.');
+      
+      await addDoc(collection(F.db, 'invitations'), {
+        fromEmail: this.email,
+        toEmail: toEmail,
+        permissions: permissions, // 'read' ou 'write'
+        status: 'pending',
+        timestamp: Date.now()
+      });
+    } else {
+      const invitations = JSON.parse(localStorage.getItem('solde.invitations') || '[]');
+      const exists = invitations.some(i => i.fromEmail === this.email && i.toEmail === toEmail && i.status === 'pending');
+      if (exists) throw new Error('Une invitation est déjà en attente pour cet e-mail.');
+      
+      invitations.push({
+        id: crypto.randomUUID(),
+        fromEmail: this.email,
+        toEmail: toEmail,
+        permissions: permissions,
+        status: 'pending',
+        timestamp: Date.now()
+      });
+      localStorage.setItem('solde.invitations', JSON.stringify(invitations));
     }
-    const k = this.user.email;
-    const txs = JSON.parse(localStorage.getItem('solde.tx.' + k) || '[]');
-    const budgets = JSON.parse(localStorage.getItem('solde.budgets.' + k) || 'null') || { ...DEFAULT_BUDGETS };
-    return { txs, budgets };
+  },
+
+  async getPendingInvitations() {
+    if (USE_FIREBASE) {
+      const { collection, query, where, getDocs } = F.fsM;
+      const q = query(
+        collection(F.db, 'invitations'),
+        where('toEmail', '==', this.email),
+        where('status', '==', 'pending')
+      );
+      const snap = await getDocs(q);
+      return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    } else {
+      const invitations = JSON.parse(localStorage.getItem('solde.invitations') || '[]');
+      return invitations.filter(i => i.toEmail === this.email && i.status === 'pending');
+    }
+  },
+
+  async respondToInvitation(invitationId, accept) {
+    if (USE_FIREBASE) {
+      const { doc, updateDoc, getDoc } = F.fsM;
+      const invRef = doc(F.db, 'invitations', invitationId);
+      const invSnap = await getDoc(invRef);
+      
+      if (!invSnap.exists()) throw new Error('Invitation introuvable.');
+      
+      if (accept) {
+        // Créer le lien entre comptes
+        const { collection, addDoc } = F.fsM;
+        await addDoc(collection(F.db, 'linkedAccounts'), {
+          ownerEmail: invSnap.data().fromEmail,
+          linkedEmail: invSnap.data().toEmail,
+          permissions: invSnap.data().permissions,
+          timestamp: Date.now()
+        });
+      }
+      
+      await updateDoc(invRef, { status: accept ? 'accepted' : 'refused' });
+    } else {
+      const invitations = JSON.parse(localStorage.getItem('solde.invitations') || '[]');
+      const inv = invitations.find(i => i.id === invitationId);
+      if (!inv) throw new Error('Invitation introuvable.');
+      
+      inv.status = accept ? 'accepted' : 'refused';
+      
+      if (accept) {
+        const linked = JSON.parse(localStorage.getItem('solde.linked') || '[]');
+        linked.push({
+          id: crypto.randomUUID(),
+          ownerEmail: inv.fromEmail,
+          linkedEmail: inv.toEmail,
+          permissions: inv.permissions,
+          timestamp: Date.now()
+        });
+        localStorage.setItem('solde.linked', JSON.stringify(linked));
+      }
+      
+      localStorage.setItem('solde.invitations', JSON.stringify(invitations));
+    }
+    
+    await this.loadLinkedAccounts();
+  },
+
+  async loadLinkedAccounts() {
+    if (USE_FIREBASE) {
+      const { collection, query, where, getDocs } = F.fsM;
+      const q = query(
+        collection(F.db, 'linkedAccounts'),
+        where('linkedEmail', '==', this.email)
+      );
+      const snap = await getDocs(q);
+      this.linkedAccounts = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    } else {
+      const linked = JSON.parse(localStorage.getItem('solde.linked') || '[]');
+      this.linkedAccounts = linked.filter(l => l.linkedEmail === this.email);
+    }
+    this.updateAccountSwitcher();
+  },
+
+  async removeLinkedAccount(linkId) {
+    if (USE_FIREBASE) {
+      const { doc, deleteDoc } = F.fsM;
+      await deleteDoc(doc(F.db, 'linkedAccounts', linkId));
+    } else {
+      const linked = JSON.parse(localStorage.getItem('solde.linked') || '[]');
+      const filtered = linked.filter(l => l.id !== linkId);
+      localStorage.setItem('solde.linked', JSON.stringify(filtered));
+    }
+    await this.loadLinkedAccounts();
+  },
+
+  updateAccountSwitcher() {
+    const list = $('#linked-accounts-list');
+    if (!list) return;
+    
+    list.innerHTML = this.linkedAccounts.map(acc => `
+      <button class="account-option ${this.currentView === acc.ownerEmail ? 'active' : ''}" 
+              data-account="${acc.ownerEmail}">
+        <span class="account-icon">👥</span>
+        <span>${acc.ownerEmail}</span>
+        <span class="account-permission ${acc.permissions}">
+          ${acc.permissions === 'read' ? '👁️ Lecture' : '✏️ Écriture'}
+        </span>
+      </button>
+    `).join('');
+
+    // Ajouter les écouteurs d'événements
+    list.querySelectorAll('.account-option').forEach(btn => {
+      btn.addEventListener('click', () => {
+        this.switchAccount(btn.dataset.account);
+      });
+    });
+  },
+
+  switchAccount(accountEmail) {
+    this.currentView = accountEmail;
+    
+    // Mettre à jour l'interface
+    $('#current-account-label').textContent = 
+      accountEmail === 'self' ? 'Mon compte' : accountEmail;
+    
+    // Mode lecture seule
+    const isReadonly = this.isReadonly;
+    document.body.classList.toggle('readonly-mode', isReadonly);
+    $('#readonly-banner').hidden = !isReadonly;
+    $('#readonly-email').textContent = this.viewEmail;
+    
+    // Fermer le menu
+    $('#account-menu').hidden = true;
+    $('#account-btn').classList.remove('open');
+    
+    // Recharger les données
+    refresh();
+  },
+
+  /* ========== CHARGEMENT DES DONNÉES ========== */
+  
+  async loadData() {
+    const targetEmail = this.viewEmail;
+    
+    if (USE_FIREBASE) {
+      const { collection, getDocs, doc, getDoc, query, where } = F.fsM;
+      
+      // Si on regarde un compte lié, trouver son UID
+      let targetUid = this.uid;
+      if (targetEmail !== this.email) {
+        // Chercher l'utilisateur par email
+        const usersQ = query(
+          collection(F.db, 'users'),
+          where('email', '==', targetEmail)
+        );
+        const usersSnap = await getDocs(usersQ);
+        if (usersSnap.empty) throw new Error('Compte lié introuvable.');
+        targetUid = usersSnap.docs[0].id;
+      }
+      
+      const snap = await getDocs(collection(F.db, 'users', targetUid, 'transactions'));
+      const txs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      const bSnap = await getDoc(doc(F.db, 'users', targetUid, 'meta', 'budgets'));
+      return { txs, budgets: bSnap.exists() ? bSnap.data() : { ...DEFAULT_BUDGETS } };
+    } else {
+      const k = targetEmail;
+      const txs = JSON.parse(localStorage.getItem('solde.tx.' + k) || '[]');
+      const budgets = JSON.parse(localStorage.getItem('solde.budgets.' + k) || 'null') || { ...DEFAULT_BUDGETS };
+      return { txs, budgets };
+    }
   },
 
   async saveTx(tx) {
+    if (this.isReadonly) throw new Error('Mode lecture seule : modification interdite.');
+    
     if (USE_FIREBASE) {
       const { collection, addDoc } = F.fsM;
       await addDoc(collection(F.db, 'users', this.uid, 'transactions'), tx);
     } else {
-      const key = 'solde.tx.' + this.user.email;
+      const key = 'solde.tx.' + this.email;
       const t = JSON.parse(localStorage.getItem(key) || '[]');
       t.push({ id: crypto.randomUUID(), ...tx });
       localStorage.setItem(key, JSON.stringify(t));
@@ -127,22 +337,26 @@ const store = {
   },
 
   async deleteTx(id) {
+    if (this.isReadonly) throw new Error('Mode lecture seule : suppression interdite.');
+    
     if (USE_FIREBASE) {
       const { doc, deleteDoc } = F.fsM;
       await deleteDoc(doc(F.db, 'users', this.uid, 'transactions', id));
     } else {
-      const key = 'solde.tx.' + this.user.email;
+      const key = 'solde.tx.' + this.email;
       const t = JSON.parse(localStorage.getItem(key) || '[]').filter(x => x.id !== id);
       localStorage.setItem(key, JSON.stringify(t));
     }
   },
 
   async saveBudgets(b) {
+    if (this.isReadonly) throw new Error('Mode lecture seule : modification interdite.');
+    
     if (USE_FIREBASE) {
       const { doc, setDoc } = F.fsM;
       await setDoc(doc(F.db, 'users', this.uid, 'meta', 'budgets'), b);
     } else {
-      localStorage.setItem('solde.budgets.' + this.user.email, JSON.stringify(b));
+      localStorage.setItem('solde.budgets.' + this.email, JSON.stringify(b));
     }
   },
 };
@@ -221,18 +435,19 @@ function dayLabel(ds) {
   const dt = new Date(y, m - 1, d), now = new Date();
   const t0 = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const diff = Math.round((t0 - dt) / 86400000);
-  if (diff === 0) return 'Aujourd’hui';
+  if (diff === 0) return 'Aujourd\'hui';
   if (diff === 1) return 'Hier';
   return cap(new Intl.DateTimeFormat('fr-FR', { weekday: 'short', day: 'numeric', month: 'short' }).format(dt));
 }
 
 function txHTML(t, i) {
   const c = CAT[t.cat] || CAT.autre;
+  const canDelete = !store.isReadonly;
   return `<div class="tx" style="animation-delay:${Math.min(i * 35, 320)}ms">
     <span class="tx-ico" style="--c:${c.c}">${c.e}</span>
     <div class="tx-meta"><b>${c.label}</b>${t.note ? `<small>${esc(t.note)}</small>` : ''}</div>
     <span class="tx-amt ${t.type === 'recette' ? 'in' : ''}">${t.type === 'recette' ? '+' : '−'}${eur(t.amount)}</span>
-    <button class="tx-del" data-id="${t.id}" aria-label="Supprimer">✕</button>
+    ${canDelete ? `<button class="tx-del" data-id="${t.id}" aria-label="Supprimer">✕</button>` : ''}
   </div>`;
 }
 
@@ -242,7 +457,7 @@ function renderTx() {
   if (!list.length) {
     el.innerHTML = `<div class="empty">
       <div class="empty-coin">€</div>
-      <p>Rien d’inscrit pour ce mois pour l’instant.</p>
+      <p>Rien d'inscrit pour ce mois pour l'instant.</p>
       <div class="empty-actions">
         <button class="btn-primary" id="empty-add">Ajouter une opération</button>
         <button class="btn-ghost" id="empty-seed">Charger des exemples</button>
@@ -297,7 +512,7 @@ function animateBars(scope) {
   }));
 }
 
-/* ---------- formulaire d’ajout ---------- */
+/* ---------- formulaire d'ajout ---------- */
 function buildCats() {
   const list = state.type === 'depense' ? CATS_DEP : CATS_REC;
   $('#tx-cats').innerHTML = list.map(c =>
@@ -324,6 +539,8 @@ $('#tx-cats').addEventListener('click', e => {
 
 $('#tx-form').addEventListener('submit', async e => {
   e.preventDefault();
+  if (store.isReadonly) return toast('Mode lecture seule : ajout impossible');
+  
   const amount = parseFloat($('#tx-amount').value.replace(',', '.'));
   if (!amount || amount <= 0) return toast('Montant invalide');
   try {
@@ -336,18 +553,20 @@ $('#tx-form').addEventListener('submit', async e => {
     $('#tx-amount').value = ''; $('#tx-note').value = '';
     toast(state.type === 'depense' ? 'Dépense ajoutée ✦' : 'Recette ajoutée ✦');
     if (window.innerWidth <= 980) { $('#add-card').classList.remove('open'); $('#fab').classList.remove('x'); }
-  } catch (err) { console.error(err); toast('Ajout impossible — vérifiez votre connexion.'); }
+  } catch (err) { console.error(err); toast(err.message || 'Ajout impossible.'); }
 });
 
 /* ---------- transactions : suppression + état vide ---------- */
 $('#tx-list').addEventListener('click', async e => {
   const del = e.target.closest('.tx-del');
   if (del) {
+    if (store.isReadonly) return toast('Mode lecture seule : suppression impossible');
     try { await store.deleteTx(del.dataset.id); await refresh(); toast('Opération supprimée'); }
-    catch { toast('Suppression impossible.'); }
+    catch (err) { toast(err.message || 'Suppression impossible.'); }
     return;
   }
   if (e.target.id === 'empty-add') {
+    if (store.isReadonly) return toast('Mode lecture seule : ajout impossible');
     if (window.innerWidth <= 980) { $('#add-card').classList.add('open'); $('#fab').classList.add('x'); }
     $('#tx-amount').focus();
     return;
@@ -356,6 +575,8 @@ $('#tx-list').addEventListener('click', async e => {
 });
 
 async function seedSamples() {
+  if (store.isReadonly) return toast('Mode lecture seule : action impossible');
+  
   const y = state.month.getFullYear(), m = state.month.getMonth();
   const now = new Date();
   const maxDay = (y === now.getFullYear() && m === now.getMonth()) ? now.getDate() : 28;
@@ -379,11 +600,13 @@ async function seedSamples() {
   for (const [type, amount, cat, note, day] of S)
     await store.saveTx({ type, amount, cat, note, date: D(day), ts: Date.now() + day });
   await refresh();
-  toast('Données d’exemple chargées ✦');
+  toast('Données d\'exemple chargées ✦');
 }
 
 /* ---------- budgets : modal ---------- */
 $('#edit-budgets').addEventListener('click', () => {
+  if (store.isReadonly) return toast('Mode lecture seule : modification impossible');
+  
   $('#budget-inputs').innerHTML = CATS_DEP.map(c =>
     `<label class="bi"><span class="tx-ico sm" style="--c:${c.c}">${c.e}</span><span>${c.label}</span>
      <input type="number" min="0" step="10" inputmode="numeric" data-id="${c.id}" value="${state.budgets[c.id] || 0}">
@@ -393,10 +616,12 @@ $('#edit-budgets').addEventListener('click', () => {
 $('#mb-cancel').addEventListener('click', () => $('#modal-budgets').hidden = true);
 $('#modal-budgets').addEventListener('click', e => { if (e.target.id === 'modal-budgets') $('#modal-budgets').hidden = true; });
 $('#mb-save').addEventListener('click', async () => {
+  if (store.isReadonly) return toast('Mode lecture seule : modification impossible');
+  
   const b = {};
   document.querySelectorAll('#budget-inputs input').forEach(i => b[i.dataset.id] = Math.max(0, +i.value || 0));
   try { await store.saveBudgets(b); state.budgets = b; renderAll(); $('#modal-budgets').hidden = true; toast('Budgets enregistrés ✦'); }
-  catch { toast('Enregistrement impossible.'); }
+  catch (err) { toast(err.message || 'Enregistrement impossible.'); }
 });
 
 /* ---------- navigation par mois ---------- */
@@ -439,6 +664,7 @@ $('#auth-form').addEventListener('submit', async e => {
     if (authMode === 'login') await store.login(email, pass);
     else await store.register(email, pass);
     await loadAndEnter();
+    await checkPendingInvitations();
   } catch (err) {
     const el = $('#auth-error');
     el.textContent = frAuthError(err); el.hidden = false;
@@ -453,6 +679,7 @@ $('#logout-btn').addEventListener('click', async () => {
   $('#view-app').hidden = true;
   $('#view-auth').hidden = false;
   $('#auth-form').reset();
+  document.body.classList.remove('readonly-mode');
 });
 
 /* ---------- cycle de vie ---------- */
@@ -464,13 +691,14 @@ async function refresh() {
 }
 
 async function loadAndEnter() {
-  try { await refresh(); } catch (err) { console.error(err); toast('Impossible de charger vos données (règles Firestore ?).'); }
+  try { await refresh(); } catch (err) { console.error(err); toast('Impossible de charger vos données.'); }
   $('#user-chip').textContent = store.user.email || '';
   $('#demo-banner').hidden = USE_FIREBASE;
   $('#view-auth').hidden = true;
   $('#view-app').hidden = false;
   $('#tx-date').value = todayISO();
   buildCats();
+  store.updateAccountSwitcher();
 }
 
 /* ---------- installation PWA + service worker ---------- */
@@ -490,6 +718,7 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
 
 /* ---------- FAB (mobile) ---------- */
 $('#fab').addEventListener('click', () => {
+  if (store.isReadonly) return toast('Mode lecture seule : ajout impossible');
   $('#add-card').classList.toggle('open');
   $('#fab').classList.toggle('x');
 });
@@ -504,9 +733,131 @@ function toast(msg) {
   toastTimer = setTimeout(() => t.hidden = true, 2600);
 }
 
+/* ========== NOUVELLES FONCTIONNALITÉS - COMPTES LIÉS ========== */
+
+/* --- Sélecteur de compte --- */
+$('#account-btn').addEventListener('click', () => {
+  const menu = $('#account-menu');
+  const btn = $('#account-btn');
+  menu.hidden = !menu.hidden;
+  btn.classList.toggle('open', !menu.hidden);
+});
+
+// Fermer le menu quand on clique ailleurs
+document.addEventListener('click', e => {
+  if (!e.target.closest('.account-switcher')) {
+    $('#account-menu').hidden = true;
+    $('#account-btn').classList.remove('open');
+  }
+});
+
+// Bouton "Mon compte"
+document.querySelector('[data-account="self"]').addEventListener('click', () => {
+  store.switchAccount('self');
+});
+
+/* --- Modal d'invitation --- */
+$('#invite-btn').addEventListener('click', () => {
+  $('#account-menu').hidden = true;
+  $('#account-btn').classList.remove('open');
+  $('#modal-invite').hidden = false;
+  $('#invite-email').value = '';
+  $('#invite-error').hidden = true;
+});
+
+$('#invite-cancel').addEventListener('click', () => {
+  $('#modal-invite').hidden = true;
+});
+
+$('#modal-invite').addEventListener('click', e => {
+  if (e.target.id === 'modal-invite') $('#modal-invite').hidden = true;
+});
+
+$('#invite-send').addEventListener('click', async () => {
+  const email = $('#invite-email').value.trim();
+  const permissions = $('#invite-permissions').value;
+  
+  if (!email) {
+    $('#invite-error').textContent = 'Veuillez entrer un e-mail.';
+    $('#invite-error').hidden = false;
+    return;
+  }
+  
+  try {
+    await store.sendInvitation(email, permissions);
+    toast(`Invitation envoyée à ${email} ✦`);
+    $('#modal-invite').hidden = true;
+  } catch (err) {
+    $('#invite-error').textContent = err.message;
+    $('#invite-error').hidden = false;
+  }
+});
+
+/* --- Vérification des invitations en attente --- */
+async function checkPendingInvitations() {
+  try {
+    const pending = await store.getPendingInvitations();
+    if (pending.length > 0) {
+      showPendingInvitations(pending);
+    }
+  } catch (err) {
+    console.error('Erreur vérification invitations:', err);
+  }
+}
+
+function showPendingInvitations(invitations) {
+  const list = $('#pending-list');
+  list.innerHTML = invitations.map(inv => `
+    <div class="pending-item">
+      <div class="pending-info">
+        <div class="pending-email">${inv.fromEmail}</div>
+        <div class="pending-permission">
+          ${inv.permissions === 'read' ? '👁️ Lecture seule' : '✏️ Lecture et écriture'}
+        </div>
+      </div>
+      <div class="pending-actions">
+        <button class="btn-accept" data-id="${inv.id}" data-action="accept">Accepter</button>
+        <button class="btn-refuse" data-id="${inv.id}" data-action="refuse">Refuser</button>
+      </div>
+    </div>
+  `).join('');
+  
+  $('#modal-pending').hidden = false;
+  
+  // Écouteurs pour accepter/refuser
+  list.querySelectorAll('button').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const { id, action } = btn.dataset;
+      try {
+        await store.respondToInvitation(id, action === 'accept');
+        toast(action === 'accept' ? 'Invitation acceptée ✦' : 'Invitation refusée');
+        btn.closest('.pending-item').remove();
+        
+        // Fermer si plus d'invitations
+        if (!list.querySelector('.pending-item')) {
+          $('#modal-pending').hidden = true;
+        }
+      } catch (err) {
+        toast(err.message);
+      }
+    });
+  });
+}
+
+$('#pending-close').addEventListener('click', () => {
+  $('#modal-pending').hidden = true;
+});
+
+$('#modal-pending').addEventListener('click', e => {
+  if (e.target.id === 'modal-pending') $('#modal-pending').hidden = true;
+});
+
 /* ---------- démarrage ---------- */
 (async function boot() {
   if (!USE_FIREBASE) $('#demo-hint').hidden = false;
   const u = await store.init();
-  if (u) loadAndEnter();
+  if (u) {
+    loadAndEnter();
+    checkPendingInvitations();
+  }
 })();
