@@ -55,8 +55,8 @@ if (USE_FIREBASE) {
 /* ---------- couche données (Firebase ou local) + comptes liés ---------- */
 const store = {
   user: null,
-  currentView: 'self',   // 'self' ou e-mail du compte consulté
-  linkedAccounts: [],    // [{ id, ownerEmail, ownerUid, permissions }]
+  currentView: 'self',
+  linkedAccounts: [],
 
   async init() {
     if (USE_FIREBASE) {
@@ -78,10 +78,10 @@ const store = {
       this.user = F.auth.currentUser;
       await this.ensureProfile();
     } else {
-      if (pass.length < 6) throw new Error('Mot de passe : 6 caractères minimum.');
+      if (pass.length < 6) throw new Error("Mot de passe : 6 caractères minimum.");
       const users = JSON.parse(localStorage.getItem('solde.users') || '{}');
-      if (users[email]) throw new Error('Un compte existe déjà avec cet e-mail.');
-      users[email] = { pass: btoa(pass) }; // ⚠️ démo uniquement — la prod utilise Firebase Auth
+      if (users[email]) throw new Error("Un compte existe déjà avec cet e-mail.");
+      users[email] = { pass: btoa(pass) };
       localStorage.setItem('solde.users', JSON.stringify(users));
       localStorage.setItem('solde.session', email);
       this.user = { email };
@@ -96,7 +96,7 @@ const store = {
       await this.ensureProfile();
     } else {
       const users = JSON.parse(localStorage.getItem('solde.users') || '{}');
-      if (!users[email] || users[email].pass !== btoa(pass)) throw new Error('E-mail ou mot de passe incorrect.');
+      if (!users[email] || users[email].pass !== btoa(pass)) throw new Error("E-mail ou mot de passe incorrect.");
       localStorage.setItem('solde.session', email);
       this.user = { email };
     }
@@ -118,7 +118,6 @@ const store = {
   get canWrite() { return this.isSelf || (this.currentLink ? this.currentLink.permissions === 'write' : false); },
   get viewEmail() { return this.isSelf ? this.email : this.currentView; },
 
-  /* Publie un profil (email ↔ uid) pour permettre la résolution entre comptes */
   async ensureProfile() {
     if (!USE_FIREBASE) return;
     try {
@@ -131,26 +130,26 @@ const store = {
     if (!USE_FIREBASE) return email;
     const { collection, query, where, getDocs } = F.fsM;
     const snap = await getDocs(query(collection(F.db, 'profiles'), where('email', '==', email)));
-    if (snap.empty) throw new Error('Compte introuvable : la personne doit se connecter au moins une fois.');
+    if (snap.empty) throw new Error("Compte introuvable : la personne doit se connecter au moins une fois.");
     return snap.docs[0].id;
   },
 
   /* ========== INVITATIONS ========== */
   async sendInvitation(toEmail, permissions) {
-    if (toEmail.toLowerCase() === this.email.toLowerCase()) throw new Error('Vous ne pouvez pas vous inviter vous-même.');
+    if (toEmail.toLowerCase() === this.email.toLowerCase()) throw new Error("Vous ne pouvez pas vous inviter vous-même.");
     if (USE_FIREBASE) {
       const { collection, addDoc, query, where, getDocs } = F.fsM;
       const q = query(collection(F.db, 'invitations'),
         where('fromEmail', '==', this.email), where('toEmail', '==', toEmail), where('status', '==', 'pending'));
       const ex = await getDocs(q);
-      if (!ex.empty) throw new Error('Une invitation est déjà en attente pour cet e-mail.');
+      if (!ex.empty) throw new Error("Une invitation est déjà en attente pour cet e-mail.");
       await addDoc(collection(F.db, 'invitations'), {
         fromEmail: this.email, toEmail, permissions, status: 'pending', timestamp: Date.now()
       });
     } else {
       const inv = JSON.parse(localStorage.getItem('solde.invitations') || '[]');
       if (inv.some(i => i.fromEmail === this.email && i.toEmail === toEmail && i.status === 'pending'))
-        throw new Error('Une invitation est déjà en attente pour cet e-mail.');
+        throw new Error("Une invitation est déjà en attente pour cet e-mail.");
       inv.push({ id: crypto.randomUUID(), fromEmail: this.email, toEmail, permissions, status: 'pending', timestamp: Date.now() });
       localStorage.setItem('solde.invitations', JSON.stringify(inv));
     }
@@ -172,7 +171,7 @@ const store = {
       const { doc, getDoc, updateDoc, setDoc } = F.fsM;
       const ref = doc(F.db, 'invitations', id);
       const snap = await getDoc(ref);
-      if (!snap.exists()) throw new Error('Invitation introuvable.');
+      if (!snap.exists()) throw new Error("Invitation introuvable.");
       const inv = snap.data();
       if (accept) {
         const ownerUid = await this.resolveUid(inv.fromEmail);
@@ -186,7 +185,7 @@ const store = {
     } else {
       const inv = JSON.parse(localStorage.getItem('solde.invitations') || '[]');
       const item = inv.find(i => i.id === id);
-      if (!item) throw new Error('Invitation introuvable.');
+      if (!item) throw new Error("Invitation introuvable.");
       item.status = accept ? 'accepted' : 'refused';
       localStorage.setItem('solde.invitations', JSON.stringify(inv));
       if (accept) {
@@ -226,7 +225,7 @@ const store = {
     await this.loadLinkedAccounts();
   },
 
-  /* ========== DONNÉES (compte courant ou compte lié) ========== */
+  /* ========== DONNÉES ========== */
   async loadData() {
     if (USE_FIREBASE) {
       const { collection, getDocs, doc, getDoc } = F.fsM;
@@ -243,7 +242,7 @@ const store = {
   },
 
   async saveTx(tx) {
-    if (!this.canWrite) throw new Error('Mode lecture seule : modification interdite.');
+    if (!this.canWrite) throw new Error("Mode lecture seule : modification interdite.");
     if (USE_FIREBASE) {
       const { collection, addDoc } = F.fsM;
       const targetUid = this.isSelf ? this.uid : await this.resolveUid(this.currentView);
@@ -257,7 +256,7 @@ const store = {
   },
 
   async deleteTx(id) {
-    if (!this.canWrite) throw new Error('Mode lecture seule : suppression interdite.');
+    if (!this.canWrite) throw new Error("Mode lecture seule : suppression interdite.");
     if (USE_FIREBASE) {
       const { doc, deleteDoc } = F.fsM;
       const targetUid = this.isSelf ? this.uid : await this.resolveUid(this.currentView);
@@ -270,7 +269,7 @@ const store = {
   },
 
   async saveBudgets(b) {
-    if (!this.canWrite) throw new Error('Mode lecture seule : modification interdite.');
+    if (!this.canWrite) throw new Error("Mode lecture seule : modification interdite.");
     if (USE_FIREBASE) {
       const { doc, setDoc } = F.fsM;
       const targetUid = this.isSelf ? this.uid : await this.resolveUid(this.currentView);
@@ -355,7 +354,7 @@ function dayLabel(ds) {
   const dt = new Date(y, m - 1, d), now = new Date();
   const t0 = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const diff = Math.round((t0 - dt) / 86400000);
-  if (diff === 0) return 'Aujourd'hui';
+  if (diff === 0) return "Aujourd'hui";
   if (diff === 1) return 'Hier';
   return cap(new Intl.DateTimeFormat('fr-FR', { weekday: 'short', day: 'numeric', month: 'short' }).format(dt));
 }
@@ -458,7 +457,7 @@ $('#tx-cats').addEventListener('click', e => {
 
 $('#tx-form').addEventListener('submit', async e => {
   e.preventDefault();
-  if (!store.canWrite) return toast('Lecture seule : ajout impossible');
+  if (!store.canWrite) return toast("Lecture seule : ajout impossible");
   const amount = parseFloat($('#tx-amount').value.replace(',', '.'));
   if (!amount || amount <= 0) return toast('Montant invalide');
   try {
@@ -471,14 +470,14 @@ $('#tx-form').addEventListener('submit', async e => {
     $('#tx-amount').value = ''; $('#tx-note').value = '';
     toast(state.type === 'depense' ? 'Dépense ajoutée ✦' : 'Recette ajoutée ✦');
     if (window.innerWidth <= 980) { $('#add-card').classList.remove('open'); $('#fab').classList.remove('x'); }
-  } catch (err) { console.error(err); toast(err.message || 'Ajout impossible — vérifiez votre connexion.'); }
+  } catch (err) { console.error(err); toast(err.message || "Ajout impossible — vérifiez votre connexion."); }
 });
 
 /* ---------- transactions : suppression + état vide ---------- */
 $('#tx-list').addEventListener('click', async e => {
   const del = e.target.closest('.tx-del');
   if (del) {
-    if (!store.canWrite) return toast('Lecture seule : suppression impossible');
+    if (!store.canWrite) return toast("Lecture seule : suppression impossible");
     try { await store.deleteTx(del.dataset.id); await refresh(); toast('Opération supprimée'); }
     catch { toast('Suppression impossible.'); }
     return;
@@ -492,7 +491,7 @@ $('#tx-list').addEventListener('click', async e => {
 });
 
 async function seedSamples() {
-  if (!store.canWrite) return toast('Lecture seule : action impossible');
+  if (!store.canWrite) return toast("Lecture seule : action impossible");
   const y = state.month.getFullYear(), m = state.month.getMonth();
   const now = new Date();
   const maxDay = (y === now.getFullYear() && m === now.getMonth()) ? now.getDate() : 28;
@@ -516,12 +515,12 @@ async function seedSamples() {
   for (const [type, amount, cat, note, day] of S)
     await store.saveTx({ type, amount, cat, note, date: D(day), ts: Date.now() + day });
   await refresh();
-  toast('Données d'exemple chargées ✦');
+  toast("Données d'exemple chargées ✦");
 }
 
 /* ---------- budgets : modal ---------- */
 $('#edit-budgets').addEventListener('click', () => {
-  if (!store.canWrite) return toast('Lecture seule : modification impossible');
+  if (!store.canWrite) return toast("Lecture seule : modification impossible");
   $('#budget-inputs').innerHTML = CATS_DEP.map(c =>
     `<label class="bi"><span class="tx-ico sm" style="--c:${c.c}">${c.e}</span><span>${c.label}</span>
      <input type="number" min="0" step="10" inputmode="numeric" data-id="${c.id}" value="${state.budgets[c.id] || 0}">
@@ -531,7 +530,7 @@ $('#edit-budgets').addEventListener('click', () => {
 $('#mb-cancel').addEventListener('click', () => $('#modal-budgets').hidden = true);
 $('#modal-budgets').addEventListener('click', e => { if (e.target.id === 'modal-budgets') $('#modal-budgets').hidden = true; });
 $('#mb-save').addEventListener('click', async () => {
-  if (!store.canWrite) return toast('Lecture seule : modification impossible');
+  if (!store.canWrite) return toast("Lecture seule : modification impossible");
   const b = {};
   document.querySelectorAll('#budget-inputs input').forEach(i => b[i.dataset.id] = Math.max(0, +i.value || 0));
   try { await store.saveBudgets(b); state.budgets = b; renderAll(); $('#modal-budgets').hidden = true; toast('Budgets enregistrés ✦'); }
@@ -634,7 +633,7 @@ $('#invite-send').addEventListener('click', async () => {
   const email = $('#invite-email').value.trim();
   const permissions = $('#invite-permissions').value;
   if (!email || !email.includes('@')) {
-    $('#invite-error').textContent = 'Veuillez entrer une adresse e-mail valide.';
+    $('#invite-error').textContent = "Veuillez entrer une adresse e-mail valide.";
     $('#invite-error').hidden = false;
     return;
   }
@@ -776,7 +775,7 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
 
 /* ---------- FAB (mobile) ---------- */
 $('#fab').addEventListener('click', () => {
-  if (!store.canWrite) return toast('Lecture seule : ajout impossible');
+  if (!store.canWrite) return toast("Lecture seule : ajout impossible");
   $('#add-card').classList.toggle('open');
   $('#fab').classList.toggle('x');
 });
