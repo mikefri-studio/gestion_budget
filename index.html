@@ -63,23 +63,23 @@
   <div id="view-app" class="view" hidden>
     <header class="topbar">
       <div class="brand-mark sm"><span class="mark-coin">€</span>Solde</div>
-      
-      <!-- Sélecteur de compte -->
-      <div class="account-switcher" id="account-switcher">
-        <button id="account-btn" class="account-btn">
+
+      <!-- Sélecteur de compte (comptes liés) -->
+      <div class="account-switcher">
+        <button id="account-btn" class="account-btn" type="button">
           <span id="current-account-label">Mon compte</span>
           <span class="chevron">▾</span>
         </button>
         <div id="account-menu" class="account-menu" hidden>
-          <button class="account-option active" data-account="self">
+          <button class="account-option active" data-view="self" type="button">
             <span class="account-icon">👤</span>
-            <span>Mon compte</span>
+            <span class="mail">Mon compte</span>
           </button>
           <div id="linked-accounts-list"></div>
           <div class="menu-separator"></div>
-          <button class="account-option invite-option" id="invite-btn">
+          <button class="account-option invite-option" id="invite-btn" type="button">
             <span class="account-icon">➕</span>
-            <span>Inviter quelqu'un</span>
+            <span class="mail">Inviter quelqu'un</span>
           </button>
         </div>
       </div>
@@ -89,19 +89,21 @@
         <button id="m-label" class="month-label" title="Revenir au mois en cours">…</button>
         <button id="m-next" class="nav-btn" aria-label="Mois suivant">›</button>
       </nav>
-      
+
       <div class="top-actions">
         <button id="install-btn" class="btn-ghost sm" hidden>⤓ Installer</button>
         <span id="user-chip" class="user-chip"></span>
         <button id="logout-btn" class="btn-ghost sm">Sortir</button>
       </div>
     </header>
-    
+
     <div id="demo-banner" class="demo-banner" hidden>Mode démo : données stockées localement — configurez Firebase pour la synchronisation.</div>
-    
-    <!-- Bandeau mode lecture seule -->
+
+    <!-- Bandeau compte lié -->
     <div id="readonly-banner" class="readonly-banner" hidden>
-      🔒 Mode lecture seule — Vous consultez le compte de <span id="readonly-email"></span>
+      <span id="readonly-icon">🔒</span>
+      <span id="readonly-text"></span>
+      <b id="readonly-email"></b>
     </div>
 
     <main class="dash">
@@ -145,7 +147,7 @@
         </section>
 
         <aside class="side">
-          <!-- Ajout rapide (caché en mode lecture seule) -->
+          <!-- Ajout rapide -->
           <section class="card add-card" id="add-card">
             <div class="sec-head"><h2 class="sec-title">Ajouter</h2></div>
             <form id="tx-form" autocomplete="off">
@@ -192,14 +194,14 @@
   <div class="modal-back" id="modal-invite" hidden>
     <div class="modal card">
       <h3 class="sec-title">Inviter quelqu'un</h3>
-      <p class="modal-sub">Entrez l'adresse e-mail de la personne avec qui vous souhaitez partager votre compte.</p>
+      <p class="modal-sub">La personne recevra une invitation à sa prochaine connexion et choisira d'accepter ou de refuser.</p>
       <label class="lbl">E-mail de la personne
         <input type="email" id="invite-email" placeholder="conjoint@exemple.fr">
       </label>
-      <label class="lbl">Permissions
+      <label class="lbl">Permissions accordées
         <select id="invite-permissions" class="select-field">
-          <option value="read">Lecture seule</option>
-          <option value="write">Lecture et écriture</option>
+          <option value="read">👁️ Lecture seule</option>
+          <option value="write">✏️ Lecture et écriture</option>
         </select>
       </label>
       <p id="invite-error" class="error" hidden></p>
@@ -214,6 +216,7 @@
   <div class="modal-back" id="modal-pending" hidden>
     <div class="modal card">
       <h3 class="sec-title">Invitations reçues</h3>
+      <p class="modal-sub">Quelqu'un souhaite partager son budget avec vous.</p>
       <div id="pending-list"></div>
       <div class="modal-actions">
         <button class="btn-ghost" id="pending-close">Fermer</button>
