@@ -1,6 +1,8 @@
 /* ═══════════ Mon budget mensuel — logique applicative ═══════════ */
 import { FIREBASE_CONFIG } from './firebase-config.js';
 import { initThemeUI, applyPrefs, getPrefs, readCache, setSaveState } from './theme.js';
+import { KINDS, DEFAULTS as CAT_DEFAULTS, initCatsUI, applySets, getSets, readCache as readCatsCache,
+         list as catList, resolve as catResolve, refreshCatsUI, openCats } from './cats.js';
 
 /* ---------- petits outils ---------- */
 const $ = s => document.querySelector(s);
@@ -22,51 +24,10 @@ const fromOf = it => it.from || MMIN;
 const toOf = it => it.to || MMAX;
 const applies = (it, k) => fromOf(it) <= k && toOf(it) >= k;
 
-/* ---------- catégories : dépenses prévues ---------- */
-const CATS = [
-  { id: 'alimentation', label: 'Alimentation', e: '🥐',  c: '#E2B45A' },
-  { id: 'logement',     label: 'Logement',     e: '🏠',  c: '#7FB4E6' },
-  { id: 'transport',    label: 'Transport',    e: '🚇',  c: '#59D69F' },
-  { id: 'loisirs',      label: 'Loisirs',      e: '🎬',  c: '#E98AC2' },
-  { id: 'sante',        label: 'Santé',        e: '💊',  c: '#F2705C' },
-  { id: 'shopping',     label: 'Shopping',     e: '🛍️', c: '#C9A6FF' },
-  { id: 'abonnements',  label: 'Abonnements',  e: '📺',  c: '#6FD6C7' },
-  { id: 'autre',        label: 'Autre',        e: '🧾',  c: '#9DB3A6' },
-];
-const CAT = Object.fromEntries(CATS.map(c => [c.id, c]));
-const catOf = v => CAT[v] || CATS.find(c => c.label === v) || CAT.autre;
-
-/* ---------- catégories : frais fixes ---------- */
-const CATS_FIX = [
-  { id: 'logement',    label: 'Logement',          e: '🏠', c: '#7FB4E6' },
-  { id: 'energie',     label: 'Énergie & eau',     e: '⚡', c: '#E8B44A' },
-  { id: 'telecom',     label: 'Internet & mobile', e: '📱', c: '#5B8DEF' },
-  { id: 'abonnements', label: 'Abonnements',       e: '📺', c: '#6FD6C7' },
-  { id: 'assurances',  label: 'Assurances',        e: '🛡️', c: '#A78BFA' },
-  { id: 'credits',     label: 'Crédits',           e: '🏦', c: '#D4A373' },
-  { id: 'impots',      label: 'Impôts & taxes',    e: '🧾', c: '#8FBF9F' },
-  { id: 'sante',       label: 'Santé & mutuelle',  e: '💊', c: '#F2705C' },
-  { id: 'transport',   label: 'Transport',         e: '🚇', c: '#59D69F' },
-  { id: 'education',   label: 'Enfants & études',  e: '🎓', c: '#C0CA6B' },
-  { id: 'epargne',     label: 'Épargne',           e: '🐖', c: '#E98AC2' },
-  { id: 'autre',       label: 'Autre',             e: '📌', c: '#9DB3A6' },
-];
-const CAT_FIX = Object.fromEntries(CATS_FIX.map(c => [c.id, c]));
-const catFixOf = v => CAT_FIX[v] || CATS_FIX.find(c => c.label === v) || CAT_FIX.autre;
-
-/* ---------- catégories : rentrées exceptionnelles ---------- */
-const CATS_EXT = [
-  { id: 'prime',         label: 'Prime & bonus',     e: '💼', c: '#E8B44A' },
-  { id: 'rappel',        label: 'Rappel de salaire', e: '🎁', c: '#D4A373' },
-  { id: 'remboursement', label: 'Remboursement',     e: '↩️', c: '#5B8DEF' },
-  { id: 'vente',         label: 'Vente',             e: '🏷️', c: '#6FD6C7' },
-  { id: 'cadeau',        label: 'Cadeau & don',      e: '🎀', c: '#E98AC2' },
-  { id: 'fiscal',        label: 'Impôts & aides',    e: '🧾', c: '#8FBF9F' },
-  { id: 'placement',     label: 'Intérêts & gains',  e: '📈', c: '#59D69F' },
-  { id: 'autre',         label: 'Autre',             e: '📌', c: '#9DB3A6' },
-];
-const CAT_EXT = Object.fromEntries(CATS_EXT.map(c => [c.id, c]));
-const catExtOf = v => CAT_EXT[v] || CATS_EXT.find(c => c.label === v) || CAT_EXT.autre;
+/* ---------- familles de catégories ---------- */
+const CK = { income: null, fixed: 'fix', extra: 'ext', plans: 'plan' };
+const appKind = k => k === 'fix' ? 'fixed' : k === 'ext' ? 'extra' : 'plans';
+const catsOf = kind => CK[kind] ? catList(CK[kind]) : null;
 
 const FIX_HINTS = [
   ['epargne', ['assurance vie', 'livret', 'ldd', 'pel', 'pea', 'epargne', 'placement', 'investissement']],
@@ -87,9 +48,10 @@ function inferFixCat(name) {
   return 'autre';
 }
 function catFor(kind, it) {
-  if (kind === 'fixed') return catFixOf(it.cat || inferFixCat(it.name));
-  if (kind === 'extra') return catExtOf(it.cat);
-  return catOf(it.cat);
+  const k = CK[kind];
+  if (!k) return { id: '', label: '', e: '💶', c: 'var(--pos)' };
+  const v = kind === 'fixed' ? (it.cat || inferFixCat(it.name)) : it.cat;
+  return catResolve(k, v);
 }
 
 /* ---------- Firebase ---------- */
@@ -128,11 +90,11 @@ let listView = {
   extra:  { group: true,  sort: 'amount-desc', filter: 'all', q: '' },
 };
 const LIST_META = {
-  income: { title: 'Revenus', ph: 'Ex. Salaire', cats: null, versioned: true,
+  income: { title: 'Revenus', ph: 'Ex. Salaire', versioned: true,
     note: 'Ce qui rentre chaque mois. Un nouveau montant s’applique à partir du mois affiché et des suivants — jamais des précédents.' },
-  fixed:  { title: 'Frais fixes', ph: 'Ex. Loyer, Netflix, assurance auto…', cats: CATS_FIX, versioned: true,
+  fixed:  { title: 'Frais fixes', ph: 'Ex. Loyer, Netflix, assurance auto…', versioned: true,
     note: 'Ce qui sort chaque mois, classé par catégorie. Un nouveau montant s’applique à partir du mois affiché et des suivants.' },
-  extra:  { title: 'Rentrées exceptionnelles', ph: 'Ex. Prime de fin d’année, vente, remboursement…', cats: CATS_EXT, versioned: false,
+  extra:  { title: 'Rentrées exceptionnelles', ph: 'Ex. Prime de fin d’année, vente, remboursement…', versioned: false,
     note: 'Une rentrée ponctuelle : un libellé, une catégorie, un montant. Elle ne compte que sur le mois affiché, sans prévu ni réel.' },
 };
 
@@ -171,7 +133,7 @@ function saveViewPrefs() {
   } catch (e) {}
 }
 
-/* ---------- écritures suivies + flush ---------- */
+/* ---------- écritures ---------- */
 const inflight = new Set();
 async function write(fn) {
   const p = (async () => { await fn(); })();
@@ -197,7 +159,8 @@ window.addEventListener('pagehide', flushSaves);
 /* ---------- couche données ---------- */
 const store = {
   user: null, currentView: 'self', linkedAccounts: [], sharedWith: [], pendingSent: [],
-  _uids: {}, _unsubs: [], _targetUid: null, _recovering: false, _prefsUnsub: null, _prefsTimer: null, _fixDone: false,
+  _uids: {}, _unsubs: [], _targetUid: null, _recovering: false,
+  _prefsUnsub: null, _prefsTimer: null, _catsUnsub: null, _catsTimer: null, _fixDone: false,
 
   async init() {
     if (USE_FIREBASE) {
@@ -249,9 +212,7 @@ const store = {
     if (!USE_FIREBASE) throw new Error("Mode démo : réinitialisation indisponible.");
     await F.authM.sendPasswordResetEmail(F.auth, email);
   },
-  async resendVerification() {
-    if (USE_FIREBASE && F.auth.currentUser) await F.authM.sendEmailVerification(F.auth.currentUser);
-  },
+  async resendVerification() { if (USE_FIREBASE && F.auth.currentUser) await F.authM.sendEmailVerification(F.auth.currentUser); },
   async refreshVerification() {
     if (!USE_FIREBASE || !F.auth.currentUser) return;
     await F.authM.reload(F.auth.currentUser);
@@ -310,7 +271,7 @@ const store = {
       if (snap.exists()) applyPrefs(snap.data(), { notify: false });
       else await setDoc(ref, getPrefs(), { merge: true });
       setSaveState('Enregistré sur votre profil ✓');
-    } catch (e) { console.warn('Préférences :', e); setSaveState('Lecture seule des réglages'); }
+    } catch (e) { console.warn('Préférences :', e); }
     this._prefsUnsub = onSnapshot(ref, s => {
       if (s.exists()) { applyPrefs(s.data(), { notify: false }); setSaveState('Enregistré sur votre profil ✓'); }
     }, () => {});
@@ -325,7 +286,41 @@ const store = {
         const { doc, setDoc } = F.fsM;
         await setDoc(doc(F.db, 'users', this.uid, 'meta', 'prefs'), p, { merge: true });
         setSaveState('Enregistré sur votre profil ✓');
-      } catch (e) { console.warn(e); setSaveState('Non enregistré — hors ligne ?'); }
+      } catch (e) { setSaveState('Non enregistré — hors ligne ?'); }
+    }, 400);
+  },
+
+  /* ========== CATÉGORIES DU BUDGET ========== */
+  async openCats() {
+    this.closeCats();
+    const key = this.viewEmail;
+    applySets(readCatsCache(key) || readCatsCache('last') || CAT_DEFAULTS, { notify: false, cacheKey: key });
+    render();
+    if (!USE_FIREBASE || !this._targetUid) return;
+    const { doc, getDoc, setDoc, onSnapshot } = F.fsM;
+    const ref = doc(F.db, 'users', this._targetUid, 'meta', 'cats');
+    try {
+      const snap = await getDoc(ref);
+      if (snap.exists()) applySets(snap.data(), { notify: false, cacheKey: key });
+      else if (this.canWrite) await setDoc(ref, getSets(), { merge: true });
+    } catch (e) { console.warn('Catégories :', e); }
+    render(); refreshCatsUI();
+    this._catsUnsub = onSnapshot(ref, s => {
+      if (!s.exists()) return;
+      applySets(s.data(), { notify: false, cacheKey: key });
+      render(); refreshDetail(); refreshCatsUI();
+    }, () => {});
+  },
+  closeCats() { if (this._catsUnsub) { try { this._catsUnsub(); } catch (e) {} this._catsUnsub = null; } },
+  queueCats(sets) {
+    clearTimeout(this._catsTimer);
+    if (!this.canWrite) { toast('Lecture seule : catégories non modifiables'); return; }
+    if (!USE_FIREBASE || !this._targetUid) { refreshCatsUI(); return; }
+    this._catsTimer = setTimeout(() => {
+      write(async () => {
+        const { doc, setDoc } = F.fsM;
+        await setDoc(doc(F.db, 'users', this._targetUid, 'meta', 'cats'), sets, { merge: true });
+      });
     }, 400);
   },
 
@@ -445,7 +440,7 @@ const store = {
   /* ========== DONNÉES ========== */
   _localKey() { return 'budget.data.' + this.viewEmail; },
   _saveLocal() { localStorage.setItem(this._localKey(), JSON.stringify(data)); },
-  closeData() { this._unsubs.forEach(u => { try { u(); } catch (e) {} }); this._unsubs = []; this._targetUid = null; },
+  closeData() { this._unsubs.forEach(u => { try { u(); } catch (e) {} }); this._unsubs = []; this.closeCats(); this._targetUid = null; },
 
   async openData() {
     this.closeData();
@@ -455,10 +450,12 @@ const store = {
     if (!USE_FIREBASE) {
       const d = JSON.parse(localStorage.getItem(this._localKey()) || 'null') || {};
       data = { income: d.income || [], fixed: d.fixed || [], plans: d.plans || {}, extra: d.extra || [] };
-      render(); this.categorizeFixed(); return;
+      await this.openCats();
+      render(); this.categorizeFixed(); refreshCatsUI(); return;
     }
     const targetUid = this.isSelf ? this.uid : (await this.resolveUser(this.currentView)).uid;
     this._targetUid = targetUid;
+    await this.openCats();
     try { await this.migrateLegacy(targetUid); } catch (e) { console.warn('Migration :', e); }
     const { collection, onSnapshot } = F.fsM;
     ['income', 'fixed', 'plans', 'extra'].forEach(kind => {
@@ -472,6 +469,7 @@ const store = {
         render();
         if (kind === 'fixed') this.categorizeFixed();
         if (detail) refreshDetail();
+        refreshCatsUI();
       }, err => {
         console.error('Synchro :', err);
         if (!this.isSelf && !this._recovering) {
@@ -517,12 +515,12 @@ const store = {
     jobs.forEach(j => { const it = data.fixed.find(x => x.id === j.id); if (it) it.cat = j.cat; });
     render();
     const plural = jobs.length > 1 ? 's' : '';
-    if (!USE_FIREBASE) { this._saveLocal(); toast(`${jobs.length} ligne${plural} de frais fixes catégorisée${plural} ✦`); return; }
+    if (!USE_FIREBASE) { this._saveLocal(); toast(`${jobs.length} ligne${plural} catégorisée${plural} ✦`); return; }
     try {
       const { doc, updateDoc } = F.fsM;
       await Promise.all(jobs.map(j => updateDoc(doc(F.db, 'users', this._targetUid, 'fixed', j.id), { cat: j.cat })));
       toast(`${jobs.length} ligne${plural} de frais fixes catégorisée${plural} ✦`);
-    } catch (e) { console.warn('Catégorisation :', e); this._fixDone = false; }
+    } catch (e) { this._fixDone = false; }
   },
 
   _check() { if (!this.canWrite) throw new Error("Mode lecture seule : modification interdite."); },
@@ -623,10 +621,10 @@ function sortItems(arr, mode, kind, cats) {
 
 function editHTML(kind, it) {
   const meta = LIST_META[kind];
-  const cats = meta ? meta.cats : CATS;
+  const cats = kind === 'plans' ? catList('plan') : catsOf(kind);
   const cur = cats ? catFor(kind, it).id : null;
   const sel = cats ? '<select name="cat" aria-label="Catégorie">' + cats.map(c =>
-    '<option value="' + c.id + '"' + (cur === c.id ? ' selected' : '') + '>' + c.e + ' ' + c.label + '</option>').join('') + '</select>' : '';
+    '<option value="' + esc(c.id) + '"' + (cur === c.id ? ' selected' : '') + '>' + esc(c.e) + ' ' + esc(c.label) + '</option>').join('') + '</select>' : '';
   const scope = meta && meta.versioned
     ? '<p class="fx-scope">Le montant s’appliquera à <b>' + esc(mname()) + '</b> et aux mois suivants. Les mois précédents gardent leurs montants ; le libellé et la catégorie sont mis à jour partout.</p>'
     : '';
@@ -639,7 +637,7 @@ function editHTML(kind, it) {
 
 function rowHTML(kind, it, showCat) {
   if (editing && editing.kind === kind && editing.id === it.id) return editHTML(kind, it);
-  const w = store.canWrite, meta = LIST_META[kind], cats = meta.cats;
+  const w = store.canWrite, meta = LIST_META[kind], cats = catsOf(kind);
   const c = cats ? catFor(kind, it) : null;
   const dot = c ? c.c : 'var(--pos)';
   const badges = [];
@@ -647,10 +645,10 @@ function rowHTML(kind, it, showCat) {
     if (it.from === ym) badges.push('<span class="vbadge new">à partir de ce mois</span>');
     if (chainOf(kind, it).length > 1) badges.push('<span class="vbadge hist">🕘 historique</span>');
   }
-  const smallParts = [];
-  if (showCat && c) smallParts.push(c.e + ' ' + esc(c.label));
-  if (badges.length) smallParts.push(badges.join(' '));
-  const small = smallParts.length ? '<small>' + smallParts.join(' · ') + '</small>' : '';
+  const parts = [];
+  if (showCat && c) parts.push(esc(c.e) + ' ' + esc(c.label));
+  if (badges.length) parts.push(badges.join(' '));
+  const small = parts.length ? '<small>' + parts.join(' · ') + '</small>' : '';
   const label = meta.versioned
     ? '<button type="button" class="nlink" data-detail="' + kind + '" data-id="' + it.id + '" title="Voir le détail et l’historique">' + esc(it.name) + '</button>'
     : esc(it.name);
@@ -671,7 +669,7 @@ function catBar(kind, items) {
 }
 
 function renderList(kind) {
-  const meta = LIST_META[kind], w = store.canWrite, st = listView[kind], cats = meta.cats;
+  const meta = LIST_META[kind], w = store.canWrite, st = listView[kind], cats = catsOf(kind);
   const all = listSource(kind);
   const counts = {};
   if (cats) all.forEach(it => { const c = catFor(kind, it).id; counts[c] = (counts[c] || 0) + 1; });
@@ -685,7 +683,9 @@ function renderList(kind) {
   items = sortItems(items, st.sort, kind, cats);
   const shown = sum(items, 'amount'), totalAll = sum(all, 'amount');
 
-  let h = '<section class="box"><h2>' + meta.title + '</h2><p class="note">' + meta.note + '</p>';
+  let h = '<section class="box"><div class="sec-head"><h2>' + meta.title + '</h2>' +
+    (cats ? '<button type="button" class="ghost sm" data-cats-kind="' + CK[kind] + '" title="Personnaliser ces catégories">⚙️ Catégories</button>' : '') + '</div>' +
+    '<p class="note">' + meta.note + '</p>';
   if (all.length) {
     h += '<div class="fx-tools">' +
       '<input class="fx-search" type="search" data-search="' + kind + '" placeholder="Rechercher…" value="' + esc(st.q) + '" aria-label="Rechercher une ligne">' +
@@ -696,7 +696,7 @@ function renderList(kind) {
     if (cats) {
       h += '<div class="fx-chips"><button type="button" class="chip" data-filter="' + kind + '" data-cat="all" aria-pressed="' + (st.filter === 'all') + '">Tous · ' + all.length + '</button>' +
         cats.filter(c => counts[c.id]).map(c =>
-          '<button type="button" class="chip" data-filter="' + kind + '" data-cat="' + c.id + '" aria-pressed="' + (st.filter === c.id) + '"><i style="background:' + c.c + '"></i>' + c.e + ' ' + c.label + ' · ' + counts[c.id] + '</button>').join('') + '</div>';
+          '<button type="button" class="chip" data-filter="' + kind + '" data-cat="' + esc(c.id) + '" aria-pressed="' + (st.filter === c.id) + '"><i style="background:' + c.c + '"></i>' + esc(c.e) + ' ' + esc(c.label) + ' · ' + counts[c.id] + '</button>').join('') + '</div>';
       h += catBar(kind, all);
     }
   }
@@ -708,7 +708,7 @@ function renderList(kind) {
     Object.keys(groups).sort((a, b) => sum(groups[b], 'amount') - sum(groups[a], 'amount')).forEach(cid => {
       const c = catFor(kind, { cat: cid, name: '' }), g = groups[cid];
       h += '<div class="fx-group"><span class="fx-dot" style="background:' + c.c + '"></span>' +
-        '<span class="fx-gname">' + c.e + ' ' + esc(c.label) + '</span>' +
+        '<span class="fx-gname">' + esc(c.e) + ' ' + esc(c.label) + '</span>' +
         '<span class="fx-gcount">' + g.length + '</span><b>' + f(sum(g, 'amount')) + '</b></div>';
       g.forEach(it => { h += rowHTML(kind, it, false); });
     });
@@ -717,11 +717,10 @@ function renderList(kind) {
   h += '<div class="tot"><span>' + (items.length !== all.length ? 'Total sélection' : 'Total') + '</span><span>' + f(shown) + '</span></div>';
   if (items.length !== all.length) h += '<div class="tot fx-sub"><span>Total général</span><span>' + f(totalAll) + '</span></div>';
   if (w) {
-    const sel = cats ? '<select name="cat" aria-label="Catégorie">' + cats.map(c => '<option value="' + c.id + '">' + c.e + ' ' + c.label + '</option>').join('') + '</select>' : '';
+    const sel = cats ? '<select name="cat" aria-label="Catégorie">' + cats.map(c => '<option value="' + esc(c.id) + '">' + esc(c.e) + ' ' + esc(c.label) + '</option>').join('') + '</select>' : '';
     h += '<form data-add="' + kind + '"><input name="name" placeholder="' + meta.ph + '" required maxlength="60" aria-label="Libellé">' + sel +
       '<input name="amount" type="number" inputmode="decimal" min="0" step="0.01" placeholder="Montant €" required aria-label="Montant en euros"><button type="submit">Ajouter</button></form>';
-    if (meta.versioned) h += '<p class="note fx-foot">Ajoutée à partir de <b>' + esc(mname()) + '</b> et des mois suivants.</p>';
-    else h += '<p class="note fx-foot">Comptée uniquement en <b>' + esc(mname()) + '</b>.</p>';
+    h += '<p class="note fx-foot">' + (meta.versioned ? 'Ajoutée à partir de <b>' + esc(mname()) + '</b> et des mois suivants.' : 'Comptée uniquement en <b>' + esc(mname()) + '</b>.') + '</p>';
   }
   return h + '</section>';
 }
@@ -742,15 +741,17 @@ function renderExtraTab() {
 
 /* ---------- dépenses prévues ---------- */
 function renderPlans() {
-  const items = plans(), w = store.canWrite;
-  let h = '<section class="box"><h2>Dépenses prévues en ' + esc(mname()) + '</h2><p class="note">Indiquez ce que vous comptez dépenser, puis saisissez le montant réel au fil du mois.</p>';
+  const items = plans(), w = store.canWrite, cats = catList('plan');
+  let h = '<section class="box"><div class="sec-head"><h2>Dépenses prévues en ' + esc(mname()) + '</h2>' +
+    '<button type="button" class="ghost sm" data-cats-kind="plan" title="Personnaliser ces catégories">⚙️ Catégories</button></div>' +
+    '<p class="note">Indiquez ce que vous comptez dépenser, puis saisissez le montant réel au fil du mois.</p>';
   if (!items.length) h += '<p class="empty">Aucune dépense prévue ce mois-ci.</p>';
   items.forEach(it => {
     if (editing && editing.kind === 'plans' && editing.id === it.id) { h += editHTML('plans', it); return; }
-    const c = catOf(it.cat);
+    const c = catFor('plans', it);
     const d = it.real === '' || it.real == null ? null : (+it.real) - (+it.amount);
     const dl = d === null ? '' : '<span class="delta ' + (d > 0 ? 'neg' : (d < 0 ? 'eco' : 'pos')) + '">' + (d > 0 ? '+' : '') + f(d) + '</span>';
-    h += '<div class="row"><span class="fx-dot" style="background:' + c.c + '"></span><div class="n">' + esc(it.name) + '<small>' + c.e + ' ' + esc(c.label) + ' · prévu ' + f(it.amount) + ' ' + dl + '</small></div>' +
+    h += '<div class="row"><span class="fx-dot" style="background:' + c.c + '"></span><div class="n">' + esc(it.name) + '<small>' + esc(c.e) + ' ' + esc(c.label) + ' · prévu ' + f(it.amount) + ' ' + dl + '</small></div>' +
       '<input class="real" type="number" inputmode="decimal" min="0" step="0.01" placeholder="Réel" value="' + (it.real == null ? '' : it.real) + '" data-real="' + it.id + '"' + (w ? '' : ' disabled') + ' aria-label="Montant réel pour ' + esc(it.name) + '">' +
       (w ? '<button class="x edit" data-edit-btn="plans" data-id="' + it.id + '" title="Modifier" aria-label="Modifier ' + esc(it.name) + '">✎</button>' +
         '<button class="x" data-del="plan" data-id="' + it.id + '" aria-label="Supprimer ' + esc(it.name) + '">×</button>' : '') + '</div>';
@@ -760,7 +761,7 @@ function renderPlans() {
   h += '<div class="tot" style="border-top:0;padding-top:4px"><span>Dépensé</span><span>' + f(real) + '</span></div>';
   h += '<div class="tot" style="border-top:0;padding-top:4px"><span>Écart réel / prévu</span>' + gapHtml() + '</div>';
   if (w) {
-    h += '<form data-add="plan"><input name="name" placeholder="Ex. Courses de la semaine" required maxlength="60" aria-label="Libellé"><select name="cat" aria-label="Catégorie">' + CATS.map(c => '<option value="' + c.id + '">' + c.e + ' ' + c.label + '</option>').join('') + '</select><input name="amount" type="number" inputmode="decimal" min="0" step="0.01" placeholder="Prévu €" required aria-label="Montant prévu en euros"><button type="submit">Ajouter</button></form>';
+    h += '<form data-add="plan"><input name="name" placeholder="Ex. Courses de la semaine" required maxlength="60" aria-label="Libellé"><select name="cat" aria-label="Catégorie">' + cats.map(c => '<option value="' + esc(c.id) + '">' + esc(c.e) + ' ' + esc(c.label) + '</option>').join('') + '</select><input name="amount" type="number" inputmode="decimal" min="0" step="0.01" placeholder="Prévu €" required aria-label="Montant prévu en euros"><button type="submit">Ajouter</button></form>';
     h += '<div class="foot"><button class="ghost" id="copy">Reprendre le mois précédent</button></div>';
   }
   return h + '</section>';
@@ -796,13 +797,11 @@ function periodSplit(kind, ms) {
   const legend = e.map(([id, v]) => {
     const c = catFor(kind, { cat: id, name: '' });
     return '<div class="fx-lrow"><span class="fx-dot" style="background:' + c.c + '"></span>' +
-      '<span class="fx-lname">' + c.e + ' ' + esc(c.label) + '</span><b>' + f(v) + '</b>' +
+      '<span class="fx-lname">' + esc(c.e) + ' ' + esc(c.label) + '</span><b>' + f(v) + '</b>' +
       '<span class="fx-lpct">' + Math.round(v / t * 100) + ' %</span></div>';
   }).join('');
   const title = kind === 'fixed' ? 'Répartition des frais fixes' : 'Rentrées exceptionnelles par nature';
-  const sub = kind === 'fixed'
-    ? f(t) + ' sur la période, mois par mois selon les montants en vigueur.'
-    : f(t) + ' sur la période (' + ms.length + ' mois).';
+  const sub = kind === 'fixed' ? f(t) + ' sur la période, mois par mois selon les montants en vigueur.' : f(t) + ' sur la période (' + ms.length + ' mois).';
   return '<section class="box"><h2>' + title + '</h2><p class="note">' + sub + '</p>' + bar + '<div class="fx-legend">' + legend + '</div></section>';
 }
 
@@ -846,7 +845,7 @@ function renderYear() {
     s += '<path d="' + dpath + '" fill="none" stroke="var(--ink)" stroke-width="1.5" stroke-dasharray="4 3"/>';
   }
   s += '</svg>';
-  h += '<section class="box"><h2>Mois par mois</h2><p class="note">Barre de gauche : le prévu. Barre de droite : le réel (uniquement les dépenses saisies). La ligne pointillée suit les revenus de chaque mois, rentrées exceptionnelles incluses — un point doré signale un mois avec une rentrée exceptionnelle.</p><div class="scroll">' + s + '</div>' +
+  h += '<section class="box"><h2>Mois par mois</h2><p class="note">Barre de gauche : le prévu. Barre de droite : le réel. La ligne pointillée suit les revenus de chaque mois, rentrées exceptionnelles incluses — un point doré signale un mois avec une rentrée exceptionnelle.</p><div class="scroll">' + s + '</div>' +
     '<div class="lg"><span><i style="background:var(--c1)"></i>Frais</span><span><i style="background:var(--c2)"></i>Prévu</span><span><i style="background:var(--c3)"></i>Réel</span><span><i style="background:var(--neg)"></i>Réel au-dessus du prévu</span><span><i style="background:var(--eco)"></i>Réel sous le prévu</span><span><i style="background:var(--gold);border-radius:50%"></i>Rentrée exceptionnelle</span><span><i class="dash"></i>Revenus du mois</span></div></section>';
   const rows = ms.map(x => { const d = x.d; return '<tr><td>' + MN[x.m - 1] + '</td><td>' + f(d.inc) + '</td><td>' + f(d.fix) + '</td><td>' + f(d.pl) + '</td><td>' + (d.n ? f(d.real) : '—') + '</td><td>' + (d.n ? '<span class="' + gcls(d.gap) + '">' + sg(d.gap) + '</span>' : '—') + '</td><td class="' + (d.rest < 0 ? 'neg' : '') + '">' + f(d.rest) + '</td></tr>'; }).join('');
   h += '<section class="box"><h2>Détail</h2><div class="scroll"><table class="wide"><thead><tr><th>Mois</th><th>Revenus</th><th>Frais</th><th>Prévu</th><th>Réel</th><th>Écart</th><th>Reste</th></tr></thead><tbody>' + rows + '</tbody><tfoot><tr><td>Total</td><td>' + f(tInc) + '</td><td>' + f(tFix) + '</td><td>' + f(tPl) + '</td><td>' + (tN ? f(tReal) : '—') + '</td><td>' + (tN ? '<span class="' + gcls(tGap) + '">' + sg(tGap) + '</span>' : '—') + '</td><td class="' + (tRest < 0 ? 'neg' : '') + '">' + f(tRest) + '</td></tr></tfoot></table></div></section>';
@@ -854,9 +853,7 @@ function renderYear() {
 }
 
 /* ---------- préservation de la saisie ---------- */
-function formKey(fm) {
-  return fm.hasAttribute('data-edit') ? 'edit:' + fm.getAttribute('data-id') : 'add:' + fm.getAttribute('data-add');
-}
+function formKey(fm) { return fm.hasAttribute('data-edit') ? 'edit:' + fm.getAttribute('data-id') : 'add:' + fm.getAttribute('data-add'); }
 function findForm(key) {
   if (key.indexOf('edit:') === 0) return document.querySelector('#view form[data-edit][data-id="' + key.slice(5) + '"]');
   return document.querySelector('#view form[data-add="' + key.slice(4) + '"]');
@@ -878,7 +875,7 @@ function captureInputs() {
 function restoreInputs(st) {
   Object.keys(st.forms).forEach(k => {
     const fm = findForm(k); if (!fm) return;
-    Object.keys(st.forms[k]).forEach(n => { const el = fm.elements[n]; if (el) el.value = st.forms[k][n]; });
+    Object.keys(st.forms[k]).forEach(n => { const el = fm.elements[n]; if (el && st.forms[k][n] != null) { const opts = el.options; if (opts && ![...opts].some(o => o.value === st.forms[k][n])) return; el.value = st.forms[k][n]; } });
   });
   if (st.search) { const el = document.querySelector('#view [data-search="' + st.search.kind + '"]'); if (el) el.value = st.search.value; }
   if (st.real) { const el = document.querySelector('#view [data-real="' + st.real.id + '"]'); if (el) el.value = st.real.value; }
@@ -887,12 +884,7 @@ function restoreInputs(st) {
   if (st.focus.real) el = document.querySelector('#view [data-real="' + st.focus.real + '"]');
   else if (st.focus.search) el = document.querySelector('#view [data-search="' + st.focus.search + '"]');
   else if (st.focus.form) { const fm = findForm(st.focus.form); el = fm && fm.elements[st.focus.name]; }
-  if (el) {
-    try {
-      el.focus();
-      if (el.setSelectionRange && (el.type === 'text' || el.type === 'search')) el.setSelectionRange(el.value.length, el.value.length);
-    } catch (e) {}
-  }
+  if (el) { try { el.focus(); if (el.setSelectionRange && (el.type === 'text' || el.type === 'search')) el.setSelectionRange(el.value.length, el.value.length); } catch (e) {} }
 }
 function render() {
   const st = captureInputs();
@@ -916,18 +908,17 @@ function openDetail(kind, id, keepFocus) {
   detail = { kind, id };
   const chain = chainOf(kind, it).sort((a, b) => fromOf(a).localeCompare(fromOf(b)));
   const c = kind === 'fixed' ? catFor('fixed', it) : null;
-  $('#dd-title').innerHTML = (c ? c.e + ' ' : '💶 ') + esc(it.name);
+  $('#dd-title').innerHTML = (c ? esc(c.e) + ' ' : '💶 ') + esc(it.name);
   let h = '<p class="note">' + (kind === 'fixed' ? 'Frais fixe' : 'Revenu récurrent') + ' · mois affiché : <b>' + esc(mname()) + '</b></p>';
   h += '<div class="dd-cur"><span>Montant ce mois</span><b>' + f(it.amount) + '</b></div>';
   h += '<h3 class="dd-h">Historique des montants</h3><div class="dd-timeline">';
   chain.forEach(v => {
-    const cur = v.id === it.id;
+    const cur2 = v.id === it.id;
     const from = v.from ? mlabel(v.from) : 'depuis toujours';
     const to = v.to ? ' → ' + mlabel(v.to) : ' → en cours';
-    h += '<div class="dd-ver' + (cur ? ' cur' : '') + '"><span class="dd-dot"></span><div class="dd-vmain"><b>' + f(v.amount) + '</b><small>' + esc(from) + esc(to) + '</small></div>' + (cur ? '<span class="dd-tag">ce mois</span>' : '') + '</div>';
+    h += '<div class="dd-ver' + (cur2 ? ' cur' : '') + '"><span class="dd-dot"></span><div class="dd-vmain"><b>' + f(v.amount) + '</b><small>' + esc(from) + esc(to) + '</small></div>' + (cur2 ? '<span class="dd-tag">ce mois</span>' : '') + '</div>';
   });
-  h += '</div>';
-  h += '<p class="tip">Modifier le montant ou arrêter cette ligne n’affecte que <b>' + esc(mname()) + '</b> et les mois suivants. Les mois précédents conservent leurs montants.</p>';
+  h += '</div><p class="tip">Modifier le montant ou arrêter cette ligne n’affecte que <b>' + esc(mname()) + '</b> et les mois suivants. Les mois précédents conservent leurs montants.</p>';
   $('#dd-body').innerHTML = h;
   $('#dd-foot').innerHTML = store.canWrite
     ? '<button class="ghost" type="button" id="dd-edit">✎ Modifier à partir de ce mois</button>' +
@@ -990,21 +981,18 @@ function commitRecurringEdit(kind, it, fields) {
   const meta = { name: fields.name };
   if (fields.cat) meta.cat = fields.cat;
   const amountChanged = +fields.amount !== +it.amount;
-
   if (!amountChanged) {
     chain.forEach(v => Object.assign(v, meta));
     render();
     write(() => store.batchOps(kind, chain.map(v => ({ type: 'update', id: v.id, fields: meta }))));
-    toast('Ligne mise à jour ✦');
-    return;
+    toast('Ligne mise à jour ✦'); return;
   }
   if (it.from === ym) {
     Object.assign(it, fields);
     chain.forEach(v => { if (v.id !== it.id) Object.assign(v, meta); });
     render();
     write(() => store.batchOps(kind, chain.map(v => ({ type: 'update', id: v.id, fields: v.id === it.id ? fields : meta }))));
-    toast('Montant mis à jour à partir de ' + mname() + ' ✦');
-    return;
+    toast('Montant mis à jour à partir de ' + mname() + ' ✦'); return;
   }
   const prevTo = it.to || null, nid = uid(), root = it.root || it.id;
   const nv = { id: nid, name: fields.name, amount: +fields.amount, from: ym, to: null, root, ts: Date.now() };
@@ -1020,8 +1008,7 @@ function commitRecurringEdit(kind, it, fields) {
   write(() => store.batchOps(kind, ops));
   toastUndo('Montant modifié à partir de ' + mname(), () => {
     data[kind] = data[kind].filter(x => x.id !== nid);
-    it.to = prevTo;
-    render();
+    it.to = prevTo; render();
     write(() => store.batchOps(kind, [{ type: 'delete', id: nid }, { type: 'update', id: it.id, fields: { to: prevTo } }]));
   });
 }
@@ -1043,7 +1030,9 @@ view.addEventListener('click', e => {
   b = e.target.closest('[data-preset]');
   if (b) { const p = b.getAttribute('data-preset').split('-'); pFrom = +p[0]; pTo = +p[1]; render(); return; }
   b = e.target.closest('[data-goto]');
-  if (b) { ym = b.getAttribute('data-goto'); render(); }
+  if (b) { ym = b.getAttribute('data-goto'); render(); return; }
+  b = e.target.closest('[data-cats-kind]');
+  if (b) { openCats(b.getAttribute('data-cats-kind')); }
 });
 
 view.addEventListener('click', e => {
@@ -1066,7 +1055,6 @@ view.addEventListener('click', e => {
 });
 
 view.addEventListener('keydown', e => { if (e.key === 'Escape' && editing) { editing = null; render(); } });
-
 view.addEventListener('input', e => {
   const k = e.target.getAttribute && e.target.getAttribute('data-search');
   if (k) { listView[k].q = e.target.value; render(); }
@@ -1107,11 +1095,9 @@ view.addEventListener('submit', e => {
     if (!it) { editing = null; render(); return; }
     editing = null;
     if (kind === 'income' || kind === 'fixed') { commitRecurringEdit(kind, it, fields); return; }
-    Object.assign(it, fields);
-    render();
+    Object.assign(it, fields); render();
     write(() => store.updateItem(kind, id, fields));
-    toast('Ligne modifiée ✦');
-    return;
+    toast('Ligne modifiée ✦'); return;
   }
   if (!store.canWrite) return toast('Lecture seule : ajout impossible');
   const k = fm.getAttribute('data-add');
@@ -1152,8 +1138,7 @@ view.addEventListener('click', e => {
       write(() => store.deleteItem('plans', id));
       toastUndo('Dépense supprimée', () => {
         (data.plans[item.month] || (data.plans[item.month] = [])).push(item);
-        render();
-        write(() => store.addItem('plans', item.id, planPayload(item)));
+        render(); write(() => store.addItem('plans', item.id, planPayload(item)));
       });
     } else if (k === 'extra') {
       const i = data.extra.findIndex(x => x.id === id);
@@ -1172,8 +1157,7 @@ view.addEventListener('click', e => {
   }
   if (e.target.id === 'copy') {
     if (!store.canWrite) return toast('Lecture seule : action impossible');
-    const pk = prevMonth(ym);
-    const src = data.plans[pk] || [];
+    const src = data.plans[prevMonth(ym)] || [];
     if (!src.length) { alert('Aucune dépense prévue le mois précédent.'); return; }
     const jobs = [];
     src.forEach((x, i) => {
@@ -1201,6 +1185,7 @@ function applyViewMode() {
   $('#current-account-label').textContent = store.isSelf ? 'Mon compte' : store.currentView;
   document.querySelectorAll('#account-menu [data-view]').forEach(b =>
     b.classList.toggle('active', b.dataset.view === store.currentView));
+  refreshCatsUI();
 }
 
 function renderAccountMenu() {
@@ -1216,7 +1201,6 @@ function renderAccountMenu() {
         </button>
         <button class="unlink-btn" data-unlink="${l.id}" title="Rompre le lien" type="button">✕</button>
       </div>`).join('');
-
   const block = $('#shared-with-block');
   block.hidden = !store.isSelf;
   if (!store.isSelf) return;
@@ -1224,8 +1208,7 @@ function renderAccountMenu() {
   store.sharedWith.forEach(l => rows.push(`
     <div class="account-row">
       <span class="account-option static">
-        <span class="account-icon">👥</span>
-        <span class="mail">${esc(l.linkedEmail)}</span>
+        <span class="account-icon">👥</span><span class="mail">${esc(l.linkedEmail)}</span>
         <span class="account-permission">${l.permissions === 'read' ? '👁️ lecture' : '✏️ écriture'}</span>
       </span>
       <button class="unlink-btn" data-revoke="${l.id}" title="Révoquer l'accès" type="button">✕</button>
@@ -1233,8 +1216,7 @@ function renderAccountMenu() {
   store.pendingSent.forEach(i => rows.push(`
     <div class="account-row">
       <span class="account-option static">
-        <span class="account-icon">✉️</span>
-        <span class="mail">${esc(i.toEmail)}</span>
+        <span class="account-icon">✉️</span><span class="mail">${esc(i.toEmail)}</span>
         <span class="account-permission">en attente</span>
       </span>
       <button class="unlink-btn" data-cancel="${i.id}" title="Annuler l'invitation" type="button">✕</button>
@@ -1395,8 +1377,7 @@ function updateVerifyBanner() {
   if (!b.hidden) $('#verify-email').textContent = store.email;
 }
 $('#verify-resend').addEventListener('click', async () => {
-  try { await store.resendVerification(); toast('Lien de vérification renvoyé ✦'); }
-  catch (err) { toast(frErr(err)); }
+  try { await store.resendVerification(); toast('Lien de vérification renvoyé ✦'); } catch (err) { toast(frErr(err)); }
 });
 $('#verify-done').addEventListener('click', async () => {
   try {
@@ -1463,9 +1444,43 @@ function toastUndo(msg, onUndo) {
   clearTimeout(toastTimer); toastTimer = setTimeout(() => t.hidden = true, 5000);
 }
 
+/* ---------- statistiques de catégories ---------- */
+function eachOf(k, fn) {
+  if (k === 'fix') data.fixed.forEach(it => fn(it, 'fixed', mlabel(fromOf(it) === MMIN ? ym : it.from) + (it.to ? ' → ' + mlabel(it.to) : '')));
+  else if (k === 'ext') data.extra.forEach(it => fn(it, 'extra', mlabel(it.month || ym)));
+  else Object.keys(data.plans).forEach(mo => data.plans[mo].forEach(it => fn(it, 'plans', mlabel(mo))));
+}
+function catUsage(k, id) {
+  let n = 0, total = 0;
+  eachOf(k, (it, kind) => { if (catFor(kind, it).id === id) { n++; total += +it.amount || 0; } });
+  return { n, total };
+}
+function catItems(k, id) {
+  const out = [];
+  eachOf(k, (it, kind, sub) => { if (catFor(kind, it).id === id) out.push({ name: it.name, amount: +it.amount || 0, sub }); });
+  return out.sort((a, b) => b.amount - a.amount);
+}
+async function reassignCats(k, fromId, toId) {
+  const ak = appKind(k), ops = [];
+  eachOf(k, (it, kind) => {
+    if (catFor(kind, it).id === fromId) { it.cat = toId; ops.push({ type: 'update', id: it.id, fields: { cat: toId } }); }
+  });
+  if (!ops.length) return;
+  render(); refreshCatsUI();
+  await store.batchOps(ak, ops);
+}
+
 /* ---------- démarrage ---------- */
 applyPrefs(readCache(), { notify: false });
 initThemeUI({ onChange: p => store.queuePrefs(p), saveHint: 'Enregistré sur cet appareil' });
+applySets(readCatsCache('last') || CAT_DEFAULTS, { notify: false });
+initCatsUI({
+  onChange: s => { store.queueCats(s); render(); refreshDetail(); },
+  usage: catUsage,
+  items: catItems,
+  onReassign: reassignCats,
+  canEdit: () => !!store.user && store.canWrite,
+});
 
 (async function boot() {
   if (!USE_FIREBASE) $('#demo-hint').hidden = false;
