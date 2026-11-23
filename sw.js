@@ -1,6 +1,6 @@
 /* Service worker — cache de l’application (fonctionnement hors-ligne) */
-const CACHE = 'budget-v2'; // incrémente (budget-v3…) à chaque mise à jour des fichiers
-const SHELL = ['./', './index.html', './styles.css', './app.js', './firebase-config.js', './manifest.webmanifest', './icon.svg'];
+const CACHE = 'budget-v4';
+const SHELL = ['./', './index.html', './aide.html', './styles.css', './app.js', './firebase-config.js', './manifest.webmanifest', './icon.svg'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting()));
