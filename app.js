@@ -11,8 +11,9 @@ const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;',
 const sum = (a, k) => a.reduce((t, x) => t + (+x[k] || 0), 0);
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 const low = s => String(s || '').trim().toLowerCase();
+const deacc = s => low(s).normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 
-/* ---------- catégories ---------- */
+/* ---------- catégories : dépenses prévues ---------- */
 const CATS = [
   { id: 'alimentation', label: 'Alimentation', e: '🥐',  c: '#E2B45A' },
   { id: 'logement',     label: 'Logement',     e: '🏠',  c: '#7FB4E6' },
@@ -25,6 +26,45 @@ const CATS = [
 ];
 const CAT = Object.fromEntries(CATS.map(c => [c.id, c]));
 const catOf = v => CAT[v] || CATS.find(c => c.label === v) || CAT.autre;
+
+/* ---------- catégories : frais fixes ---------- */
+const CATS_FIX = [
+  { id: 'logement',    label: 'Logement',        e: '🏠', c: '#7FB4E6', ex: 'Loyer, crédit immo, charges de copro' },
+  { id: 'energie',     label: 'Énergie & eau',   e: '⚡', c: '#E8B44A', ex: 'Électricité, gaz, eau, chauffage' },
+  { id: 'telecom',     label: 'Internet & mobile', e: '📱', c: '#5B8DEF', ex: 'Box, fibre, forfaits téléphone' },
+  { id: 'abonnements', label: 'Abonnements',     e: '📺', c: '#6FD6C7', ex: 'Streaming, apps, presse, licences' },
+  { id: 'assurances',  label: 'Assurances',      e: '🛡️', c: '#A78BFA', ex: 'Auto, habitation, prévoyance' },
+  { id: 'credits',     label: 'Crédits',         e: '🏦', c: '#D4A373', ex: 'Prêts, mensualités, revolving' },
+  { id: 'impots',      label: 'Impôts & taxes',  e: '🧾', c: '#8FBF9F', ex: 'Impôt sur le revenu, taxe foncière' },
+  { id: 'sante',       label: 'Santé & mutuelle', e: '💊', c: '#F2705C', ex: 'Mutuelle, soins réguliers' },
+  { id: 'transport',   label: 'Transport',       e: '🚇', c: '#59D69F', ex: 'Pass, essence, péage, leasing' },
+  { id: 'education',   label: 'Enfants & études', e: '🎓', c: '#C0CA6B', ex: 'Scolarité, cantine, garde, cours' },
+  { id: 'epargne',     label: 'Épargne',         e: '🐖', c: '#E98AC2', ex: 'Virement épargne, assurance vie' },
+  { id: 'autre',       label: 'Autre',           e: '📌', c: '#9DB3A6', ex: 'Tout le reste' },
+];
+const CAT_FIX = Object.fromEntries(CATS_FIX.map(c => [c.id, c]));
+const catFixOf = v => CAT_FIX[v] || CATS_FIX.find(c => c.label === v) || CAT_FIX.autre;
+
+/* reconnaissance automatique des lignes existantes */
+const FIX_HINTS = [
+  ['epargne', ['assurance vie', 'livret', 'ldd', 'pel', 'pea', 'epargne', 'placement', 'investissement']],
+  ['logement', ['loyer', 'location', 'bail', 'credit immo', 'pret immo', 'hypotheque', 'copro', 'syndic', 'logement', 'residence', 'charges']],
+  ['energie', ['edf', 'engie', 'electricite', 'energie', 'gaz', 'eau', 'chauffage', 'veolia', 'suez', 'fioul', 'fuel']],
+  ['telecom', ['internet', 'box', 'fibre', 'adsl', 'forfait', 'mobile', 'telephone', 'orange', 'sfr', 'bouygues', 'free', 'sosh', 'red by']],
+  ['abonnements', ['netflix', 'spotify', 'disney', 'prime', 'canal', 'deezer', 'apple music', 'youtube', 'streaming', 'abonnement', 'presse', 'magazine', 'journal', 'xbox', 'playstation', 'nintendo', 'icloud', 'google one', 'dropbox', 'adobe', 'microsoft', 'logiciel']],
+  ['assurances', ['assurance', 'maif', 'macif', 'axa', 'allianz', 'groupama', 'matmut', 'mma', 'gmf', 'maaf', 'prevoyance', 'responsabilite civile']],
+  ['credits', ['credit', 'pret', 'mensualite', 'emprunt', 'revolving', 'sofinco', 'cetelem', 'cofidis', 'franfinance']],
+  ['impots', ['impot', 'taxe', 'fonciere', 'dgfip', 'tresor public', 'redevance', 'habitation']],
+  ['sante', ['mutuelle', 'sante', 'pharmacie', 'medecin', 'dentiste', 'kine', 'osteo', 'optique', 'harmonie', 'mgen', 'alan', 'april']],
+  ['transport', ['navigo', 'sncf', 'ratp', 'metro', 'bus', 'train', 'essence', 'carburant', 'gazole', 'peage', 'parking', 'leasing', 'loa', 'lld', 'velo', 'transport', 'autoroute']],
+  ['education', ['ecole', 'scolaire', 'scolarite', 'cantine', 'garderie', 'creche', 'nounou', 'periscolaire', 'soutien', 'universite', 'formation', 'garde', 'etude']],
+];
+function inferFixCat(name) {
+  const n = deacc(name);
+  for (const [id, words] of FIX_HINTS) if (words.some(w => n.includes(w))) return id;
+  return 'autre';
+}
+const fixCat = it => it.cat || inferFixCat(it.name);
 
 /* ---------- Firebase ---------- */
 let USE_FIREBASE = /^AIza/.test(FIREBASE_CONFIG.apiKey || '');
@@ -47,15 +87,39 @@ if (USE_FIREBASE) {
   }
 }
 
-/* ---------- état du budget ---------- */
+/* ---------- état ---------- */
 const now0 = new Date();
 let data = { income: [], fixed: [], plans: {} };
 let ym = `${now0.getFullYear()}-${String(now0.getMonth() + 1).padStart(2, '0')}`;
 let tab = 'fixes';
+let editing = null;
+const SORTS = [['amount-desc', 'Montant ↓'], ['amount-asc', 'Montant ↑'], ['name', 'Nom A→Z'], ['cat', 'Catégorie'], ['recent', 'Ajout récent']];
+let listView = {
+  income: { group: false, sort: 'amount-desc', filter: 'all', q: '' },
+  fixed:  { group: true,  sort: 'amount-desc', filter: 'all', q: '' },
+};
+const LIST_META = {
+  income: { title: 'Revenus', ph: 'Ex. Salaire', note: 'Ce qui rentre chaque mois.', cats: null },
+  fixed:  { title: 'Frais fixes', ph: 'Ex. Loyer, Netflix, assurance auto…', note: 'Ce qui sort chaque mois, classé par catégorie : logement, énergie, abonnements, assurances, crédits…', cats: CATS_FIX },
+};
 const plans = () => data.plans[ym] || (data.plans[ym] = []);
 function shift(d) { const p = ym.split('-'); const dt = new Date(+p[0], +p[1] - 1 + d, 1); ym = dt.getFullYear() + '-' + String(dt.getMonth() + 1).padStart(2, '0'); render(); }
 function mname() { const p = ym.split('-'); return new Date(+p[0], +p[1] - 1, 1).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' }); }
 const planPayload = it => ({ name: it.name, cat: it.cat, amount: +it.amount || 0, real: it.real == null ? '' : it.real, month: it.month || ym, ts: it.ts || Date.now() });
+
+function loadViewPrefs() {
+  try {
+    const p = JSON.parse(localStorage.getItem('budget.view.' + store.email) || 'null');
+    if (p) ['income', 'fixed'].forEach(k => { if (p[k]) listView[k] = { ...listView[k], ...p[k], q: '' }; });
+  } catch (e) {}
+}
+function saveViewPrefs() {
+  try {
+    const o = {};
+    ['income', 'fixed'].forEach(k => { const { group, sort, filter } = listView[k]; o[k] = { group, sort, filter }; });
+    localStorage.setItem('budget.view.' + store.email, JSON.stringify(o));
+  } catch (e) {}
+}
 
 /* ---------- écritures suivies + flush ---------- */
 const inflight = new Set();
@@ -83,7 +147,7 @@ window.addEventListener('pagehide', flushSaves);
 /* ---------- couche données ---------- */
 const store = {
   user: null, currentView: 'self', linkedAccounts: [], sharedWith: [], pendingSent: [],
-  _uids: {}, _unsubs: [], _targetUid: null, _recovering: false, _prefsUnsub: null, _prefsTimer: null,
+  _uids: {}, _unsubs: [], _targetUid: null, _recovering: false, _prefsUnsub: null, _prefsTimer: null, _fixDone: false,
 
   async init() {
     if (USE_FIREBASE) {
@@ -185,7 +249,7 @@ const store = {
     return res;
   },
 
-  /* ========== APPARENCE (par profil) ========== */
+  /* ========== APPARENCE ========== */
   async openPrefs() {
     this.closePrefs();
     if (!USE_FIREBASE || !this.user) { setSaveState('Enregistré sur cet appareil'); return; }
@@ -194,7 +258,7 @@ const store = {
     try {
       const snap = await getDoc(ref);
       if (snap.exists()) applyPrefs(snap.data(), { notify: false });
-      else { await setDoc(ref, getPrefs(), { merge: true }); }
+      else await setDoc(ref, getPrefs(), { merge: true });
       setSaveState('Enregistré sur votre profil ✓');
     } catch (e) { console.warn('Préférences :', e); setSaveState('Lecture seule des réglages'); }
     this._prefsUnsub = onSnapshot(ref, s => {
@@ -336,11 +400,14 @@ const store = {
   async openData() {
     this.closeData();
     data = { income: [], fixed: [], plans: {} };
+    editing = null; this._fixDone = false;
     render();
     if (!USE_FIREBASE) {
       const d = JSON.parse(localStorage.getItem(this._localKey()) || 'null') || {};
       data = { income: d.income || [], fixed: d.fixed || [], plans: d.plans || {} };
-      render(); return;
+      render();
+      this.categorizeFixed();
+      return;
     }
     const targetUid = this.isSelf ? this.uid : (await this.resolveUser(this.currentView)).uid;
     this._targetUid = targetUid;
@@ -355,6 +422,7 @@ const store = {
           data.plans = m;
         } else data[kind] = items;
         render();
+        if (kind === 'fixed') this.categorizeFixed();
       }, err => {
         console.error('Synchro :', err);
         if (!this.isSelf && !this._recovering) {
@@ -380,7 +448,7 @@ const store = {
     const batch = writeBatch(F.db);
     const base = Date.now(); let n = 0;
     (old.income || []).forEach(it => { if (it.id) batch.set(doc(F.db, 'users', targetUid, 'income', it.id), { name: it.name, amount: +it.amount || 0, ts: base + (n++) }); });
-    (old.fixed || []).forEach(it => { if (it.id) batch.set(doc(F.db, 'users', targetUid, 'fixed', it.id), { name: it.name, amount: +it.amount || 0, ts: base + (n++) }); });
+    (old.fixed || []).forEach(it => { if (it.id) batch.set(doc(F.db, 'users', targetUid, 'fixed', it.id), { name: it.name, amount: +it.amount || 0, cat: it.cat || inferFixCat(it.name), ts: base + (n++) }); });
     Object.keys(old.plans || {}).forEach(month => {
       (old.plans[month] || []).forEach(it => {
         if (it.id) batch.set(doc(F.db, 'users', targetUid, 'plans', it.id),
@@ -389,6 +457,24 @@ const store = {
     });
     batch.set(ref, { migrated: true }, { merge: true });
     await batch.commit();
+  },
+
+  /* catégorisation automatique des frais fixes sans catégorie */
+  async categorizeFixed() {
+    if (this._fixDone || !this.canWrite) return;
+    const missing = data.fixed.filter(it => !it.cat);
+    if (!missing.length) return;
+    this._fixDone = true;
+    const jobs = missing.map(it => ({ id: it.id, cat: inferFixCat(it.name) }));
+    jobs.forEach(j => { const it = data.fixed.find(x => x.id === j.id); if (it) it.cat = j.cat; });
+    render();
+    const plural = jobs.length > 1 ? 's' : '';
+    if (!USE_FIREBASE) { this._saveLocal(); toast(`${jobs.length} ligne${plural} de frais fixes catégorisée${plural} ✦`); return; }
+    try {
+      const { doc, updateDoc } = F.fsM;
+      await Promise.all(jobs.map(j => updateDoc(doc(F.db, 'users', this._targetUid, 'fixed', j.id), { cat: j.cat })));
+      toast(`${jobs.length} ligne${plural} de frais fixes catégorisée${plural} ✦`);
+    } catch (e) { console.warn('Catégorisation :', e); this._fixDone = false; }
   },
 
   _check() { if (!this.canWrite) throw new Error("Mode lecture seule : modification interdite."); },
@@ -458,31 +544,120 @@ function renderSum() {
     '<div class="gap"><span>Écart réel / prévu</span>' + gapHtml() + '</div>';
 }
 
-/* ---------- listes ---------- */
-function listBlock(title, key, ph, note) {
-  const items = data[key], w = store.canWrite;
-  let h = '<section class="box"><h2>' + title + '</h2><p class="note">' + note + '</p>';
-  if (!items.length) h += '<p class="empty">Rien pour l’instant.' + (w ? ' Ajoutez une ligne ci-dessous.' : '') + '</p>';
-  items.forEach(it => {
-    h += '<div class="row"><div class="n">' + esc(it.name) + '</div><div class="a">' + f(it.amount) + '</div>' +
-      (w ? '<button class="x" data-del="' + key + '" data-id="' + it.id + '" aria-label="Supprimer ' + esc(it.name) + '">×</button>' : '') + '</div>';
+/* ---------- listes : tri, filtre, recherche, édition ---------- */
+function sortItems(arr, mode, cats) {
+  const a = [...arr];
+  const cn = it => cats ? catFixOf(fixCat(it)).label : '';
+  if (mode === 'amount-asc') a.sort((x, y) => (+x.amount) - (+y.amount));
+  else if (mode === 'name') a.sort((x, y) => String(x.name).localeCompare(String(y.name), 'fr'));
+  else if (mode === 'cat') a.sort((x, y) => cn(x).localeCompare(cn(y), 'fr') || (+y.amount) - (+x.amount));
+  else if (mode === 'recent') a.sort((x, y) => (y.ts || 0) - (x.ts || 0));
+  else a.sort((x, y) => (+y.amount) - (+x.amount));
+  return a;
+}
+
+function editHTML(kind, it) {
+  const cats = kind === 'fixed' ? CATS_FIX : kind === 'plans' ? CATS : null;
+  const cur = kind === 'fixed' ? fixCat(it) : cats ? catOf(it.cat).id : null;
+  const sel = cats ? '<select name="cat" aria-label="Catégorie">' + cats.map(c =>
+    '<option value="' + c.id + '"' + (cur === c.id ? ' selected' : '') + '>' + c.e + ' ' + c.label + '</option>').join('') + '</select>' : '';
+  return '<form class="fx-edit" data-edit="' + kind + '" data-id="' + it.id + '">' +
+    '<input name="name" value="' + esc(it.name) + '" required maxlength="60" aria-label="Libellé">' + sel +
+    '<input name="amount" type="number" inputmode="decimal" min="0" step="0.01" value="' + (+it.amount || 0) + '" required aria-label="Montant en euros">' +
+    '<button type="submit" title="Enregistrer">✓</button>' +
+    '<button type="button" class="ghost" data-cancel-edit>Annuler</button></form>';
+}
+
+function rowHTML(kind, it, showCat) {
+  if (editing && editing.kind === kind && editing.id === it.id) return editHTML(kind, it);
+  const w = store.canWrite;
+  const c = kind === 'fixed' ? catFixOf(fixCat(it)) : null;
+  const dot = c ? c.c : 'var(--pos)';
+  const small = showCat && c ? '<small>' + c.e + ' ' + esc(c.label) + '</small>' : '';
+  return '<div class="row"><span class="fx-dot" style="background:' + dot + '"></span>' +
+    '<div class="n">' + esc(it.name) + small + '</div><div class="a">' + f(it.amount) + '</div>' +
+    (w ? '<button class="x edit" data-edit-btn="' + kind + '" data-id="' + it.id + '" title="Modifier" aria-label="Modifier ' + esc(it.name) + '">✎</button>' +
+      '<button class="x" data-del="' + kind + '" data-id="' + it.id + '" aria-label="Supprimer ' + esc(it.name) + '">×</button>' : '') + '</div>';
+}
+
+function fxBar(items) {
+  const g = {};
+  items.forEach(it => { const c = fixCat(it); g[c] = (g[c] || 0) + (+it.amount || 0); });
+  const e = Object.entries(g).sort((a, b) => b[1] - a[1]);
+  const t = e.reduce((s, [, v]) => s + v, 0);
+  if (!t) return '';
+  return '<div class="fx-bar" role="img" aria-label="Répartition des frais fixes par catégorie">' +
+    e.map(([id, v]) => { const c = catFixOf(id); return '<i style="width:' + (v / t * 100).toFixed(2) + '%;background:' + c.c + '" title="' + esc(c.label) + ' — ' + f(v) + '"></i>'; }).join('') + '</div>';
+}
+
+function renderList(kind) {
+  const meta = LIST_META[kind], w = store.canWrite, st = listView[kind], cats = meta.cats;
+  const all = data[kind];
+  const counts = {};
+  if (cats) all.forEach(it => { const c = fixCat(it); counts[c] = (counts[c] || 0) + 1; });
+  if (cats && st.filter !== 'all' && !counts[st.filter]) st.filter = 'all';
+  const q = st.q.trim().toLowerCase();
+  let items = all.filter(it => {
+    if (q && !String(it.name).toLowerCase().includes(q)) return false;
+    if (cats && st.filter !== 'all' && fixCat(it) !== st.filter) return false;
+    return true;
   });
-  h += '<div class="tot"><span>Total</span><span>' + f(sum(items, 'amount')) + '</span></div>';
-  if (w) h += '<form data-add="' + key + '"><input name="name" placeholder="' + ph + '" required maxlength="60" aria-label="Libellé"><input name="amount" type="number" inputmode="decimal" min="0" step="0.01" placeholder="Montant €" required aria-label="Montant en euros"><button type="submit">Ajouter</button></form>';
+  items = sortItems(items, st.sort, cats);
+  const shown = sum(items, 'amount'), totalAll = sum(all, 'amount');
+
+  let h = '<section class="box"><h2>' + meta.title + '</h2><p class="note">' + meta.note + '</p>';
+  if (all.length) {
+    h += '<div class="fx-tools">' +
+      '<input class="fx-search" type="search" data-search="' + kind + '" placeholder="Rechercher…" value="' + esc(st.q) + '" aria-label="Rechercher une ligne">' +
+      '<select data-sort="' + kind + '" aria-label="Trier les lignes">' +
+      SORTS.filter(s => cats || s[0] !== 'cat').map(s => '<option value="' + s[0] + '"' + (st.sort === s[0] ? ' selected' : '') + '>' + s[1] + '</option>').join('') + '</select>' +
+      (cats ? '<button type="button" class="ghost fx-toggle" data-group="' + kind + '" aria-pressed="' + st.group + '">' + (st.group ? '🗂️ Groupé' : '📋 Liste') + '</button>' : '') +
+      '</div>';
+    if (cats) {
+      h += '<div class="fx-chips"><button type="button" class="chip" data-filter="' + kind + '" data-cat="all" aria-pressed="' + (st.filter === 'all') + '">Tous · ' + all.length + '</button>' +
+        CATS_FIX.filter(c => counts[c.id]).map(c =>
+          '<button type="button" class="chip" data-filter="' + kind + '" data-cat="' + c.id + '" aria-pressed="' + (st.filter === c.id) + '"><i style="background:' + c.c + '"></i>' + c.e + ' ' + c.label + ' · ' + counts[c.id] + '</button>').join('') + '</div>';
+      h += fxBar(all);
+    }
+  }
+  if (!all.length) h += '<p class="empty">Rien pour l’instant.' + (w ? ' Ajoutez une ligne ci-dessous.' : '') + '</p>';
+  else if (!items.length) h += '<p class="empty">Aucune ligne ne correspond à cette recherche.</p>';
+  else if (cats && st.group) {
+    const groups = {};
+    items.forEach(it => { const c = fixCat(it); (groups[c] || (groups[c] = [])).push(it); });
+    Object.keys(groups).sort((a, b) => sum(groups[b], 'amount') - sum(groups[a], 'amount')).forEach(cid => {
+      const c = catFixOf(cid), g = groups[cid];
+      h += '<div class="fx-group"><span class="fx-dot" style="background:' + c.c + '"></span>' +
+        '<span class="fx-gname">' + c.e + ' ' + esc(c.label) + '</span>' +
+        '<span class="fx-gcount">' + g.length + '</span><b>' + f(sum(g, 'amount')) + '</b></div>';
+      g.forEach(it => { h += rowHTML(kind, it, false); });
+    });
+  } else items.forEach(it => { h += rowHTML(kind, it, !!cats); });
+
+  h += '<div class="tot"><span>' + (items.length !== all.length ? 'Total sélection' : 'Total') + '</span><span>' + f(shown) + '</span></div>';
+  if (items.length !== all.length) h += '<div class="tot fx-sub"><span>Total général</span><span>' + f(totalAll) + '</span></div>';
+  if (w) {
+    const sel = cats ? '<select name="cat" aria-label="Catégorie">' + cats.map(c => '<option value="' + c.id + '">' + c.e + ' ' + c.label + '</option>').join('') + '</select>' : '';
+    h += '<form data-add="' + kind + '"><input name="name" placeholder="' + meta.ph + '" required maxlength="60" aria-label="Libellé">' + sel +
+      '<input name="amount" type="number" inputmode="decimal" min="0" step="0.01" placeholder="Montant €" required aria-label="Montant en euros"><button type="submit">Ajouter</button></form>';
+  }
   return h + '</section>';
 }
 
+/* ---------- dépenses prévues ---------- */
 function renderPlans() {
   const items = plans(), w = store.canWrite;
   let h = '<section class="box"><h2>Dépenses prévues en ' + esc(mname()) + '</h2><p class="note">Indiquez ce que vous comptez dépenser, puis saisissez le montant réel au fil du mois.</p>';
   if (!items.length) h += '<p class="empty">Aucune dépense prévue ce mois-ci.</p>';
   items.forEach(it => {
+    if (editing && editing.kind === 'plans' && editing.id === it.id) { h += editHTML('plans', it); return; }
     const c = catOf(it.cat);
     const d = it.real === '' || it.real == null ? null : (+it.real) - (+it.amount);
     const dl = d === null ? '' : '<span class="delta ' + (d > 0 ? 'neg' : (d < 0 ? 'eco' : 'pos')) + '">' + (d > 0 ? '+' : '') + f(d) + '</span>';
-    h += '<div class="row"><div class="n">' + esc(it.name) + '<small>' + c.e + ' ' + esc(c.label) + ' · prévu ' + f(it.amount) + ' ' + dl + '</small></div>' +
+    h += '<div class="row"><span class="fx-dot" style="background:' + c.c + '"></span><div class="n">' + esc(it.name) + '<small>' + c.e + ' ' + esc(c.label) + ' · prévu ' + f(it.amount) + ' ' + dl + '</small></div>' +
       '<input class="real" type="number" inputmode="decimal" min="0" step="0.01" placeholder="Réel" value="' + (it.real == null ? '' : it.real) + '" data-real="' + it.id + '"' + (w ? '' : ' disabled') + ' aria-label="Montant réel pour ' + esc(it.name) + '">' +
-      (w ? '<button class="x" data-del="plan" data-id="' + it.id + '" aria-label="Supprimer ' + esc(it.name) + '">×</button>' : '') + '</div>';
+      (w ? '<button class="x edit" data-edit-btn="plans" data-id="' + it.id + '" title="Modifier" aria-label="Modifier ' + esc(it.name) + '">✎</button>' +
+        '<button class="x" data-del="plan" data-id="' + it.id + '" aria-label="Supprimer ' + esc(it.name) + '">×</button>' : '') + '</div>';
   });
   const real = items.reduce((t, x) => t + (x.real === '' || x.real == null ? 0 : +x.real), 0);
   h += '<div class="tot"><span>Prévu</span><span>' + f(sum(items, 'amount')) + '</span></div>';
@@ -503,6 +678,27 @@ function gcls(g) { return g > 0 ? 'neg' : (g < 0 ? 'eco' : 'pos'); }
 function sg(g) { return (g > 0 ? '+' : '') + f(g); }
 function card(l, v, c) { return '<div class="card"><span>' + l + '</span><b class="' + (c || '') + '">' + v + '</b></div>'; }
 function rect(x, y, w, h, c) { return h > 0 ? '<rect x="' + x + '" y="' + y + '" width="' + w + '" height="' + h + '" fill="' + c + '" rx="2"/>' : ''; }
+
+function renderFixSplit(N) {
+  const items = data.fixed;
+  if (!items.length) return '';
+  const g = {};
+  items.forEach(it => { const c = fixCat(it); g[c] = (g[c] || 0) + (+it.amount || 0); });
+  const e = Object.entries(g).sort((a, b) => b[1] - a[1]);
+  const t = e.reduce((s, [, v]) => s + v, 0) || 1;
+  const bar = '<div class="fx-bar lg" role="img" aria-label="Répartition des frais fixes par catégorie">' +
+    e.map(([id, v]) => { const c = catFixOf(id); return '<i style="width:' + (v / t * 100).toFixed(2) + '%;background:' + c.c + '" title="' + esc(c.label) + '"></i>'; }).join('') + '</div>';
+  const legend = e.map(([id, v]) => {
+    const c = catFixOf(id);
+    return '<div class="fx-lrow"><span class="fx-dot" style="background:' + c.c + '"></span>' +
+      '<span class="fx-lname">' + c.e + ' ' + esc(c.label) + '</span><b>' + f(v * N) + '</b>' +
+      '<span class="fx-lpct">' + Math.round(v / t * 100) + ' %</span></div>';
+  }).join('');
+  return '<section class="box"><h2>Répartition des frais fixes</h2>' +
+    '<p class="note">' + f(t) + ' par mois, soit ' + f(t * N) + ' sur la période (' + N + ' mois).</p>' +
+    bar + '<div class="fx-legend">' + legend + '</div></section>';
+}
+
 function renderYear() {
   const inc = sum(data.income, 'amount'), fix = sum(data.fixed, 'amount');
   const ms = [];
@@ -518,6 +714,7 @@ function renderYear() {
   h += '<div class="per"><label>Du <select data-sel="from" aria-label="Premier mois">' + opts(pFrom) + '</select></label><label>au <select data-sel="to" aria-label="Dernier mois">' + opts(pTo) + '</select></label><span class="muted">' + N + ' mois</span></div></section>';
   h += '<section class="box"><h2>Bilan ' + (full ? 'de ' + yr : MN[pFrom - 1] + ' – ' + MN[pTo - 1] + ' ' + yr) + '</h2><div class="cards">' + card('Revenus', f(tInc)) + card('Frais', f(tFix)) + card('Dépenses prévues', f(tPl)) + card('Reste prévisionnel', f(tRest), tRest < 0 ? 'neg' : 'pos') + '</div>' +
     '<div class="gap"><span>Écart réel / prévu</span>' + (tN ? '<span><b class="' + gcls(tGap) + '">' + sg(tGap) + '</b> <span class="muted">' + (tGap > 0 ? 'dépassement' : (tGap < 0 ? 'économie' : 'pile dans le budget')) + '</span></span>' : '<span class="muted">Aucun montant réel saisi</span>') + '</div></section>';
+  h += renderFixSplit(N);
   let mx = Math.max(inc, 1);
   ms.forEach(x => { mx = Math.max(mx, fix + x.d.pl, x.d.n ? fix + x.d.real : 0); });
   const L = 62, R = 632, T = 14, B = 214, W = R - L, H = B - T, sw = W / N, bw = Math.min(sw * 0.38, 24);
@@ -539,32 +736,47 @@ function renderYear() {
   return h;
 }
 
-/* ---------- rendu ---------- */
+/* ---------- rendu : préservation de la saisie ---------- */
+function formKey(fm) {
+  return fm.hasAttribute('data-edit') ? 'edit:' + fm.getAttribute('data-id') : 'add:' + fm.getAttribute('data-add');
+}
+function findForm(key) {
+  if (key.indexOf('edit:') === 0) return document.querySelector('#view form[data-edit][data-id="' + key.slice(5) + '"]');
+  return document.querySelector('#view form[data-add="' + key.slice(4) + '"]');
+}
 function captureInputs() {
-  const st = { forms: {}, real: null, focus: null };
-  document.querySelectorAll('#view form[data-add]').forEach(fm => {
+  const st = { forms: {}, real: null, search: null, focus: null };
+  document.querySelectorAll('#view form[data-add],#view form[data-edit]').forEach(fm => {
     const o = {};
     ['name', 'amount', 'cat'].forEach(n => { const el = fm.elements[n]; if (el) o[n] = el.value; });
-    st.forms[fm.getAttribute('data-add')] = o;
+    st.forms[formKey(fm)] = o;
+  });
+  document.querySelectorAll('#view [data-search]').forEach(el => {
+    st.search = { kind: el.getAttribute('data-search'), value: el.value };
   });
   const ae = document.activeElement;
   if (ae && ae.dataset && ae.dataset.real) { st.real = { id: ae.dataset.real, value: ae.value }; st.focus = { real: ae.dataset.real }; }
-  else if (ae && ae.form && ae.form.getAttribute && ae.form.getAttribute('data-add') && ae.name)
-    st.focus = { add: ae.form.getAttribute('data-add'), name: ae.name };
+  else if (ae && ae.getAttribute && ae.getAttribute('data-search')) st.focus = { search: ae.getAttribute('data-search') };
+  else if (ae && ae.form && ae.name && st.forms[formKey(ae.form)]) st.focus = { form: formKey(ae.form), name: ae.name };
   return st;
 }
 function restoreInputs(st) {
   Object.keys(st.forms).forEach(k => {
-    const fm = document.querySelector('#view form[data-add="' + k + '"]');
-    if (!fm) return;
+    const fm = findForm(k); if (!fm) return;
     Object.keys(st.forms[k]).forEach(n => { const el = fm.elements[n]; if (el) el.value = st.forms[k][n]; });
   });
+  if (st.search) { const el = document.querySelector('#view [data-search="' + st.search.kind + '"]'); if (el) el.value = st.search.value; }
   if (st.real) { const el = document.querySelector('#view [data-real="' + st.real.id + '"]'); if (el) el.value = st.real.value; }
-  if (st.focus) {
-    let el = null;
-    if (st.focus.real) el = document.querySelector('#view [data-real="' + st.focus.real + '"]');
-    else { const fm = document.querySelector('#view form[data-add="' + st.focus.add + '"]'); el = fm && fm.elements[st.focus.name]; }
-    if (el) { try { el.focus(); } catch (e) {} }
+  if (!st.focus) return;
+  let el = null;
+  if (st.focus.real) el = document.querySelector('#view [data-real="' + st.focus.real + '"]');
+  else if (st.focus.search) el = document.querySelector('#view [data-search="' + st.focus.search + '"]');
+  else if (st.focus.form) { const fm = findForm(st.focus.form); el = fm && fm.elements[st.focus.name]; }
+  if (el) {
+    try {
+      el.focus();
+      if (el.setSelectionRange && (el.type === 'text' || el.type === 'search')) el.setSelectionRange(el.value.length, el.value.length);
+    } catch (e) {}
   }
 }
 function render() {
@@ -578,7 +790,7 @@ function render() {
   const v = $('#view');
   v.className = 'tab-' + tab;
   v.innerHTML = tab === 'fixes'
-    ? listBlock('Revenus', 'income', 'Ex. Salaire', 'Ce qui rentre chaque mois.') + listBlock('Frais', 'fixed', 'Ex. Loyer', 'Ce qui sort chaque mois : loyer, abonnements, assurances…')
+    ? renderList('income') + renderList('fixed')
     : tab === 'plans' ? renderPlans() : renderYear();
   restoreInputs(st);
 }
@@ -586,17 +798,45 @@ function render() {
 /* ---------- événements budget ---------- */
 $('#prev').onclick = () => shift(-1);
 $('#next').onclick = () => shift(1);
-$('#t-fixes').onclick = () => { tab = 'fixes'; render(); };
-$('#t-plans').onclick = () => { tab = 'plans'; render(); };
-$('#t-year').onclick = () => { tab = 'year'; yr = +ym.slice(0, 4); render(); };
+$('#t-fixes').onclick = () => { tab = 'fixes'; editing = null; render(); };
+$('#t-plans').onclick = () => { tab = 'plans'; editing = null; render(); };
+$('#t-year').onclick = () => { tab = 'year'; editing = null; yr = +ym.slice(0, 4); render(); };
 
 const view = $('#view');
+
 view.addEventListener('click', e => {
   let b = e.target.closest('[data-yr]');
   if (b) { yr += +b.getAttribute('data-yr'); render(); return; }
   b = e.target.closest('[data-preset]');
   if (b) { const p = b.getAttribute('data-preset').split('-'); pFrom = +p[0]; pTo = +p[1]; render(); }
 });
+
+view.addEventListener('click', e => {
+  const g = e.target.closest('[data-group]');
+  if (g) { const k = g.getAttribute('data-group'); listView[k].group = !listView[k].group; saveViewPrefs(); render(); return; }
+  const fl = e.target.closest('[data-filter]');
+  if (fl) { const k = fl.getAttribute('data-filter'); listView[k].filter = fl.getAttribute('data-cat'); saveViewPrefs(); render(); return; }
+  const eb = e.target.closest('[data-edit-btn]');
+  if (eb) {
+    if (!store.canWrite) return toast('Lecture seule : modification impossible');
+    editing = { kind: eb.getAttribute('data-edit-btn'), id: eb.getAttribute('data-id') };
+    render();
+    const fm = document.querySelector('#view form[data-edit][data-id="' + editing.id + '"]');
+    if (fm && fm.elements.name) { try { fm.elements.name.focus(); fm.elements.name.select(); } catch (err) {} }
+    return;
+  }
+  if (e.target.closest('[data-cancel-edit]')) { editing = null; render(); }
+});
+
+view.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && editing) { editing = null; render(); }
+});
+
+view.addEventListener('input', e => {
+  const k = e.target.getAttribute && e.target.getAttribute('data-search');
+  if (k) { listView[k].q = e.target.value; render(); }
+});
+
 view.addEventListener('change', e => {
   const s = e.target.getAttribute && e.target.getAttribute('data-sel');
   if (s) {
@@ -604,6 +844,8 @@ view.addEventListener('change', e => {
     if (s === 'from') { pFrom = v; if (pTo < v) pTo = v; } else { pTo = v; if (pFrom > v) pFrom = v; }
     render(); return;
   }
+  const so = e.target.getAttribute && e.target.getAttribute('data-sort');
+  if (so) { listView[so].sort = e.target.value; saveViewPrefs(); render(); return; }
   const id = e.target.getAttribute && e.target.getAttribute('data-real');
   if (id) {
     if (!store.canWrite) return;
@@ -614,10 +856,28 @@ view.addEventListener('change', e => {
     write(() => store.updateItem('plans', id, { real: v }));
   }
 });
+
+function saveEdit(fm) {
+  if (!store.canWrite) return toast('Lecture seule : modification impossible');
+  const kind = fm.getAttribute('data-edit'), id = fm.getAttribute('data-id');
+  const n = fm.elements.name.value.trim(), a = parseFloat(fm.elements.amount.value);
+  if (!n || isNaN(a) || a < 0) return toast('Libellé et montant valides requis');
+  const fields = { name: n, amount: a };
+  if (fm.elements.cat) fields.cat = fm.elements.cat.value;
+  const arr = kind === 'plans' ? plans() : data[kind];
+  const it = arr.find(x => x.id === id);
+  if (it) Object.assign(it, fields);
+  editing = null; render();
+  write(() => store.updateItem(kind, id, fields));
+  toast('Ligne modifiée ✦');
+}
+
 view.addEventListener('submit', e => {
   e.preventDefault();
+  const fm = e.target;
+  if (fm.hasAttribute('data-edit')) return saveEdit(fm);
   if (!store.canWrite) return toast('Lecture seule : ajout impossible');
-  const fm = e.target, k = fm.getAttribute('data-add');
+  const k = fm.getAttribute('data-add');
   const n = fm.elements.name.value.trim(), a = parseFloat(fm.elements.amount.value);
   if (!n || isNaN(a) || a < 0) return;
   const id = uid(), ts = Date.now();
@@ -627,12 +887,18 @@ view.addEventListener('submit', e => {
     plans().push({ id, name: n, cat, amount: a, real: '', month: ym, ts });
     render();
     write(() => store.addItem('plans', id, { name: n, cat, amount: a, real: '', month: ym, ts }));
+  } else if (k === 'fixed') {
+    const cat = fm.elements.cat.value;
+    data.fixed.push({ id, name: n, amount: a, cat, ts });
+    render();
+    write(() => store.addItem('fixed', id, { name: n, amount: a, cat, ts }));
   } else {
     data[k].push({ id, name: n, amount: a, ts });
     render();
     write(() => store.addItem(k, id, { name: n, amount: a, ts }));
   }
 });
+
 view.addEventListener('click', e => {
   const b = e.target.closest('[data-del]');
   if (b) {
@@ -641,7 +907,7 @@ view.addEventListener('click', e => {
     if (k === 'plan') {
       const arr = plans(), i = arr.findIndex(x => x.id === id);
       if (i < 0) return;
-      const item = arr[i]; arr.splice(i, 1); render();
+      const item = arr[i]; arr.splice(i, 1); editing = null; render();
       write(() => store.deleteItem('plans', id));
       toastUndo('Dépense supprimée', () => {
         (data.plans[item.month] || (data.plans[item.month] = [])).push(item);
@@ -651,11 +917,13 @@ view.addEventListener('click', e => {
     } else {
       const arr = data[k], i = arr.findIndex(x => x.id === id);
       if (i < 0) return;
-      const item = arr[i]; arr.splice(i, 1); render();
+      const item = arr[i]; arr.splice(i, 1); editing = null; render();
       write(() => store.deleteItem(k, id));
       toastUndo('Ligne supprimée', () => {
         data[k].push(item); render();
-        write(() => store.addItem(k, item.id, { name: item.name, amount: item.amount, ts: item.ts || Date.now() }));
+        const payload = { name: item.name, amount: item.amount, ts: item.ts || Date.now() };
+        if (k === 'fixed') payload.cat = fixCat(item);
+        write(() => store.addItem(k, item.id, payload));
       });
     }
     return;
@@ -899,7 +1167,7 @@ $('#verify-done').addEventListener('click', async () => {
 $('#logout-btn').addEventListener('click', async () => {
   await store.logout();
   data = { income: [], fixed: [], plans: {} };
-  tab = 'fixes';
+  tab = 'fixes'; editing = null;
   $('#view-app').hidden = true;
   $('#view-auth').hidden = false;
   $('#auth-form').reset();
@@ -916,6 +1184,7 @@ async function loadAndEnter() {
   updateVerifyBanner();
   $('#view-auth').hidden = true;
   $('#view-app').hidden = false;
+  loadViewPrefs();
   applyViewMode();
   renderAccountMenu();
   await store.openPrefs();
