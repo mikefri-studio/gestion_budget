@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Mon budget mensuel</title>
-  <meta name="description" content="Revenus, frais fixes, rentrées exceptionnelles, dépenses prévues et bilan — synchronisés et partageables.">
+  <meta name="description" content="Revenus, frais fixes, rentrées exceptionnelles, dépenses prévues et bilan — catégories personnalisables, synchronisé et partageable.">
   <script>
   (function(){try{
     var p=JSON.parse(localStorage.getItem('budget.prefs.last')||'{}');
@@ -39,7 +39,7 @@
           <h1>Mon budget mensuel</h1>
           <button class="ghost" type="button" data-theme-open title="Apparence" aria-label="Changer l'apparence">🎨</button>
         </div>
-        <p class="note">Connectez-vous pour retrouver votre budget — et votre thème — sur tous vos appareils.</p>
+        <p class="note">Connectez-vous pour retrouver votre budget, vos catégories et votre thème sur tous vos appareils.</p>
         <div class="tabs auth-tabs">
           <button type="button" data-mode="login" class="on">Connexion</button>
           <button type="button" data-mode="register">Créer un compte</button>
@@ -91,6 +91,7 @@
       </div>
 
       <div class="top-actions">
+        <button class="ghost" type="button" data-cats-open title="Paramètres des catégories" aria-label="Paramètres des catégories">⚙️</button>
         <button class="ghost" type="button" data-theme-open title="Apparence" aria-label="Changer l'apparence">🎨</button>
         <a class="ghost" href="./aide.html" title="Aide" aria-label="Aide">?</a>
         <button id="install-btn" class="ghost" hidden>⤓ Installer</button>
