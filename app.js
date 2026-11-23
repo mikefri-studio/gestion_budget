@@ -1,35 +1,30 @@
-/* ═══════════ Solde — logique applicative (comptes liés + permissions) ═══════════ */
+/* ═══════════ Mon budget mensuel — logique applicative ═══════════
+   Interface et calculs : code du collègue (revenus / frais fixes / dépenses prévues / bilan).
+   Conservé du repo : Firebase (connexion, invitations, comptes liés, permissions) + catégories. */
 import { FIREBASE_CONFIG } from './firebase-config.js';
 
 /* ---------- petits outils ---------- */
 const $ = s => document.querySelector(s);
-const eur = new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format;
-const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
-const todayISO = () => {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-};
+const eur = new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' });
+const fc0 = new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 });
+const f = n => eur.format(n || 0);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const sum = (a, k) => a.reduce((t, x) => t + (+x[k] || 0), 0);
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 
-/* ---------- catégories ---------- */
-const CATS_DEP = [
-  { id: 'alimentation',  label: 'Alimentation',  e: '🥐',   c: '#E2B45A' },
-  { id: 'logement',      label: 'Logement',      e: '🏠',   c: '#7FB4E6' },
-  { id: 'transport',     label: 'Transport',     e: '🚇',   c: '#59D69F' },
-  { id: 'loisirs',       label: 'Loisirs',       e: '🎬',   c: '#E98AC2' },
-  { id: 'sante',         label: 'Santé',         e: '💊',   c: '#F2705C' },
-  { id: 'shopping',      label: 'Shopping',      e: '🛍️',  c: '#C9A6FF' },
-  { id: 'abonnements',   label: 'Abonnements',   e: '📺',   c: '#6FD6C7' },
-  { id: 'autre',         label: 'Autre',         e: '🧾',   c: '#9DB3A6' },
+/* ---------- catégories (conservées du repo) ---------- */
+const CATS = [
+  { id: 'alimentation', label: 'Alimentation', e: '🥐',  c: '#E2B45A' },
+  { id: 'logement',     label: 'Logement',     e: '🏠',  c: '#7FB4E6' },
+  { id: 'transport',    label: 'Transport',    e: '🚇',  c: '#59D69F' },
+  { id: 'loisirs',      label: 'Loisirs',      e: '🎬',  c: '#E98AC2' },
+  { id: 'sante',        label: 'Santé',        e: '💊',  c: '#F2705C' },
+  { id: 'shopping',     label: 'Shopping',     e: '🛍️', c: '#C9A6FF' },
+  { id: 'abonnements',  label: 'Abonnements',  e: '📺',  c: '#6FD6C7' },
+  { id: 'autre',        label: 'Autre',        e: '🧾',  c: '#9DB3A6' },
 ];
-const CATS_REC = [
-  { id: 'salaire',    label: 'Salaire',    e: '💼', c: '#59D69F' },
-  { id: 'freelance',  label: 'Freelance',  e: '🧑‍💻', c: '#6FD6C7' },
-  { id: 'aides',      label: 'Aides',      e: '🤝', c: '#E2B45A' },
-  { id: 'autre-rec',  label: 'Autre',      e: '💶', c: '#9DB3A6' },
-];
-const CAT = Object.fromEntries([...CATS_DEP, ...CATS_REC].map(c => [c.id, c]));
-const DEFAULT_BUDGETS = { alimentation: 300, logement: 700, transport: 120, loisirs: 150, sante: 50, shopping: 120, abonnements: 40, autre: 80 };
+const CAT = Object.fromEntries(CATS.map(c => [c.id, c]));
+const catOf = v => CAT[v] || CATS.find(c => c.label === v) || CAT.autre;
 
 /* ---------- Firebase (chargé uniquement si configuré) ---------- */
 let USE_FIREBASE = /^AIza/.test(FIREBASE_CONFIG.apiKey || '');
@@ -54,10 +49,7 @@ if (USE_FIREBASE) {
 
 /* ---------- couche données (Firebase ou local) + comptes liés ---------- */
 const store = {
-  user: null,
-  currentView: 'self',
-  linkedAccounts: [],
-
+  user: null, currentView: 'self', linkedAccounts: [], _uids: {},
   async init() {
     if (USE_FIREBASE) {
       return new Promise(res => F.authM.onAuthStateChanged(F.auth, async u => {
@@ -71,7 +63,6 @@ const store = {
     if (this.user) await this.loadLinkedAccounts();
     return this.user;
   },
-
   async register(email, pass) {
     if (USE_FIREBASE) {
       await F.authM.createUserWithEmailAndPassword(F.auth, email, pass);
@@ -88,7 +79,6 @@ const store = {
     }
     await this.loadLinkedAccounts();
   },
-
   async login(email, pass) {
     if (USE_FIREBASE) {
       await F.authM.signInWithEmailAndPassword(F.auth, email, pass);
@@ -102,22 +92,17 @@ const store = {
     }
     await this.loadLinkedAccounts();
   },
-
   async logout() {
     if (USE_FIREBASE) await F.authM.signOut(F.auth);
     else localStorage.removeItem('solde.session');
-    this.user = null;
-    this.linkedAccounts = [];
-    this.currentView = 'self';
+    this.user = null; this.linkedAccounts = []; this.currentView = 'self';
   },
-
   get uid() { return USE_FIREBASE ? this.user.uid : 'local'; },
   get email() { return (this.user && this.user.email) || 'local'; },
   get isSelf() { return this.currentView === 'self'; },
   get currentLink() { return this.linkedAccounts.find(l => l.ownerEmail === this.currentView) || null; },
   get canWrite() { return this.isSelf || (this.currentLink ? this.currentLink.permissions === 'write' : false); },
   get viewEmail() { return this.isSelf ? this.email : this.currentView; },
-
   async ensureProfile() {
     if (!USE_FIREBASE) return;
     try {
@@ -125,13 +110,14 @@ const store = {
       await setDoc(doc(F.db, 'profiles', this.uid), { email: this.email }, { merge: true });
     } catch (e) { console.warn('Profil non publié :', e); }
   },
-
   async resolveUid(email) {
     if (!USE_FIREBASE) return email;
+    if (this._uids[email]) return this._uids[email];
     const { collection, query, where, getDocs } = F.fsM;
     const snap = await getDocs(query(collection(F.db, 'profiles'), where('email', '==', email)));
     if (snap.empty) throw new Error("Compte introuvable : la personne doit se connecter au moins une fois.");
-    return snap.docs[0].id;
+    this._uids[email] = snap.docs[0].id;
+    return this._uids[email];
   },
 
   /* ========== INVITATIONS ========== */
@@ -154,7 +140,6 @@ const store = {
       localStorage.setItem('solde.invitations', JSON.stringify(inv));
     }
   },
-
   async getPendingInvitations() {
     if (USE_FIREBASE) {
       const { collection, query, where, getDocs } = F.fsM;
@@ -165,7 +150,6 @@ const store = {
     const inv = JSON.parse(localStorage.getItem('solde.invitations') || '[]');
     return inv.filter(i => i.toEmail === this.email && i.status === 'pending');
   },
-
   async respondToInvitation(id, accept) {
     if (USE_FIREBASE) {
       const { doc, getDoc, updateDoc, setDoc } = F.fsM;
@@ -200,7 +184,6 @@ const store = {
     }
     await this.loadLinkedAccounts();
   },
-
   async loadLinkedAccounts() {
     if (USE_FIREBASE) {
       const { collection, query, where, getDocs } = F.fsM;
@@ -211,7 +194,6 @@ const store = {
       this.linkedAccounts = linked.filter(l => l.linkedEmail === this.email);
     }
   },
-
   async removeLink(linkId) {
     if (USE_FIREBASE) {
       const { doc, deleteDoc } = F.fsM;
@@ -225,325 +207,234 @@ const store = {
     await this.loadLinkedAccounts();
   },
 
-  /* ========== DONNÉES ========== */
+  /* ========== DONNÉES DU BUDGET (modèle du collègue : income / fixed / plans) ========== */
   async loadData() {
     if (USE_FIREBASE) {
-      const { collection, getDocs, doc, getDoc } = F.fsM;
+      const { doc, getDoc } = F.fsM;
       const targetUid = this.isSelf ? this.uid : await this.resolveUid(this.currentView);
-      const snap = await getDocs(collection(F.db, 'users', targetUid, 'transactions'));
-      const txs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      const bSnap = await getDoc(doc(F.db, 'users', targetUid, 'meta', 'budgets'));
-      return { txs, budgets: bSnap.exists() ? bSnap.data() : { ...DEFAULT_BUDGETS } };
+      const snap = await getDoc(doc(F.db, 'users', targetUid, 'meta', 'budget'));
+      const d = snap.exists() ? snap.data() : {};
+      return { income: d.income || [], fixed: d.fixed || [], plans: d.plans || {} };
     }
-    const k = this.viewEmail;
-    const txs = JSON.parse(localStorage.getItem('solde.tx.' + k) || '[]');
-    const budgets = JSON.parse(localStorage.getItem('solde.budgets.' + k) || 'null') || { ...DEFAULT_BUDGETS };
-    return { txs, budgets };
+    const d = JSON.parse(localStorage.getItem('budget.data.' + this.viewEmail) || 'null') || {};
+    return { income: d.income || [], fixed: d.fixed || [], plans: d.plans || {} };
   },
-
-  async saveTx(tx) {
-    if (!this.canWrite) throw new Error("Mode lecture seule : modification interdite.");
-    if (USE_FIREBASE) {
-      const { collection, addDoc } = F.fsM;
-      const targetUid = this.isSelf ? this.uid : await this.resolveUid(this.currentView);
-      await addDoc(collection(F.db, 'users', targetUid, 'transactions'), tx);
-    } else {
-      const key = 'solde.tx.' + this.viewEmail;
-      const t = JSON.parse(localStorage.getItem(key) || '[]');
-      t.push({ id: crypto.randomUUID(), ...tx });
-      localStorage.setItem(key, JSON.stringify(t));
-    }
-  },
-
-  async deleteTx(id) {
-    if (!this.canWrite) throw new Error("Mode lecture seule : suppression interdite.");
-    if (USE_FIREBASE) {
-      const { doc, deleteDoc } = F.fsM;
-      const targetUid = this.isSelf ? this.uid : await this.resolveUid(this.currentView);
-      await deleteDoc(doc(F.db, 'users', targetUid, 'transactions', id));
-    } else {
-      const key = 'solde.tx.' + this.viewEmail;
-      const t = JSON.parse(localStorage.getItem(key) || '[]').filter(x => x.id !== id);
-      localStorage.setItem(key, JSON.stringify(t));
-    }
-  },
-
-  async saveBudgets(b) {
+  async saveData(data) {
     if (!this.canWrite) throw new Error("Mode lecture seule : modification interdite.");
     if (USE_FIREBASE) {
       const { doc, setDoc } = F.fsM;
       const targetUid = this.isSelf ? this.uid : await this.resolveUid(this.currentView);
-      await setDoc(doc(F.db, 'users', targetUid, 'meta', 'budgets'), b);
+      await setDoc(doc(F.db, 'users', targetUid, 'meta', 'budget'),
+        { income: data.income, fixed: data.fixed, plans: data.plans });
     } else {
-      localStorage.setItem('solde.budgets.' + this.viewEmail, JSON.stringify(b));
+      localStorage.setItem('budget.data.' + this.viewEmail, JSON.stringify(data));
     }
   },
 };
 
-/* ---------- état ---------- */
-const state = {
-  month: new Date(new Date().getFullYear(), new Date().getMonth(), 1),
-  txs: [], budgets: {}, type: 'depense', cat: 'alimentation',
-};
-const monthKey = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-const monthTx = () => state.txs.filter(t => t.date.startsWith(monthKey(state.month)));
-const spendByCat = () => {
-  const m = {};
-  for (const t of monthTx()) if (t.type === 'depense') m[t.cat] = (m[t.cat] || 0) + t.amount;
-  return m;
-};
+/* ---------- état du budget (code du collègue, stocké via Firebase) ---------- */
+const now0 = new Date();
+let data = { income: [], fixed: [], plans: {} };
+let ym = `${now0.getFullYear()}-${String(now0.getMonth() + 1).padStart(2, '0')}`;
+let tab = 'fixes';
+const plans = () => data.plans[ym] || (data.plans[ym] = []);
+function shift(d) { const p = ym.split('-'); const dt = new Date(+p[0], +p[1] - 1 + d, 1); ym = dt.getFullYear() + '-' + String(dt.getMonth() + 1).padStart(2, '0'); render(); }
+function mname() { const p = ym.split('-'); return new Date(+p[0], +p[1] - 1, 1).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' }); }
 
-/* ---------- rendu ---------- */
-function renderAll() {
-  $('#m-label').textContent = cap(new Intl.DateTimeFormat('fr-FR', { month: 'long', year: 'numeric' }).format(state.month));
-  renderHero(); renderTx(); renderBudgets(); renderSplit();
+/* Sauvegarde différée (regroupe les frappes rapides) */
+let saveTimer = null;
+function persist() {
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(async () => {
+    try { await store.saveData(data); }
+    catch (err) { console.error(err); toast(err.message || 'Enregistrement impossible — vérifiez votre connexion.'); }
+  }, 350);
 }
 
-function countUp(el, to) {
-  const from = parseFloat(el.dataset.v || 0);
-  el.dataset.v = to;
-  const t0 = performance.now(), dur = 650;
-  (function step(t) {
-    const p = Math.min(1, (t - t0) / dur), e = 1 - Math.pow(1 - p, 3);
-    el.textContent = eur(from + (to - from) * e);
-    if (p < 1) requestAnimationFrame(step);
-  })(t0);
-}
+/* ---------- écart réel / prévu ---------- */
+function gap() { let g = 0, n = 0; plans().forEach(x => { if (x.real !== '' && x.real != null) { g += (+x.real) - (+x.amount); n++; } }); return { g, n }; }
+function gapHtml() { const r = gap(); if (!r.n) return '<span class="muted">Aucun montant réel saisi</span>'; const c = r.g > 0 ? 'neg' : (r.g < 0 ? 'eco' : 'pos'); const l = r.g > 0 ? 'dépassement' : (r.g < 0 ? 'économie' : 'pile dans le budget'); return '<span><b class="' + c + '">' + (r.g > 0 ? '+' : '') + f(r.g) + '</b> <span class="muted">' + l + '</span></span>'; }
 
-function renderHero() {
-  const txs = monthTx();
-  const inc = txs.filter(t => t.type === 'recette').reduce((s, t) => s + t.amount, 0);
-  const out = txs.filter(t => t.type === 'depense').reduce((s, t) => s + t.amount, 0);
-  countUp($('#balance'), inc - out);
-  $('#balance').classList.toggle('neg', inc - out < 0);
-  $('#sum-in').textContent = eur(inc);
-  $('#sum-out').textContent = eur(out);
-
-  const totalB = Object.values(state.budgets).reduce((s, v) => s + (v || 0), 0);
-  const pct = totalB > 0 ? out / totalB : 0;
-  $('#budget-pct').textContent = Math.round(pct * 100) + ' %';
-  const bar = $('#budget-bar');
-  bar.dataset.w = Math.min(100, pct * 100);
-  bar.style.background = pct > 1 ? 'var(--coral)' : 'var(--gold)';
-
-  const C = 2 * Math.PI * 52, ring = $('#gauge-ring');
-  ring.style.strokeDasharray = C;
-  ring.style.strokeDashoffset = C * (1 - Math.min(1, pct));
-  ring.classList.toggle('over', pct > 1);
-  const left = totalB - out;
-  $('#gauge-txt').textContent = eur(left);
-  $('#gauge-sub').textContent = left >= 0 ? 'à dépenser' : 'dépassé';
-
-  const now = new Date();
-  const isCurrent = state.month.getFullYear() === now.getFullYear() && state.month.getMonth() === now.getMonth();
-  const daysIn = new Date(state.month.getFullYear(), state.month.getMonth() + 1, 0).getDate();
-  const elapsed = isCurrent ? now.getDate() : daysIn;
-  $('#st-avg').textContent = eur(out / Math.max(1, elapsed));
-  const max = txs.filter(t => t.type === 'depense').reduce((m, t) => Math.max(m, t.amount), 0);
-  $('#st-max').textContent = max ? eur(max) : '—';
-  $('#st-count').textContent = txs.length;
-  $('#tx-count').textContent = txs.length + (txs.length > 1 ? ' opérations' : ' opération');
-
-  requestAnimationFrame(() => requestAnimationFrame(() => {
-    document.querySelectorAll('#budget-bar').forEach(i => i.style.width = i.dataset.w + '%');
-  }));
-}
-
-function dayLabel(ds) {
-  const [y, m, d] = ds.split('-').map(Number);
-  const dt = new Date(y, m - 1, d), now = new Date();
-  const t0 = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const diff = Math.round((t0 - dt) / 86400000);
-  if (diff === 0) return "Aujourd'hui";
-  if (diff === 1) return 'Hier';
-  return cap(new Intl.DateTimeFormat('fr-FR', { weekday: 'short', day: 'numeric', month: 'short' }).format(dt));
-}
-
-function txHTML(t, i) {
-  const c = CAT[t.cat] || CAT.autre;
-  return `<div class="tx" style="animation-delay:${Math.min(i * 35, 320)}ms">
-    <span class="tx-ico" style="--c:${c.c}">${c.e}</span>
-    <div class="tx-meta"><b>${c.label}</b>${t.note ? `<small>${esc(t.note)}</small>` : ''}</div>
-    <span class="tx-amt ${t.type === 'recette' ? 'in' : ''}">${t.type === 'recette' ? '+' : '−'}${eur(t.amount)}</span>
-    ${store.canWrite ? `<button class="tx-del" data-id="${t.id}" aria-label="Supprimer">✕</button>` : '<span></span>'}
-  </div>`;
-}
-
-function renderTx() {
-  const list = monthTx().sort((a, b) => b.date.localeCompare(a.date) || (b.ts || 0) - (a.ts || 0));
-  const el = $('#tx-list');
-  if (!list.length) {
-    el.innerHTML = `<div class="empty">
-      <div class="empty-coin">€</div>
-      <p>Rien d'inscrit pour ce mois pour l'instant.</p>
-      ${store.canWrite ? `<div class="empty-actions">
-        <button class="btn-primary" id="empty-add">Ajouter une opération</button>
-        <button class="btn-ghost" id="empty-seed">Charger des exemples</button>
-      </div>` : ''}</div>`;
-    return;
+/* ---------- résumé (donut) ---------- */
+function renderSum() {
+  const inc = sum(data.income, 'amount'), fix = sum(data.fixed, 'amount'), pl = sum(plans(), 'amount');
+  const rest = inc - fix - pl;
+  const base = Math.max(inc, fix + pl, 1);
+  const segs = [[fix, 'var(--c1)'], [pl, 'var(--c2)'], [Math.max(rest, 0), 'var(--c3)']];
+  let off = 0, arcs = '<circle cx="21" cy="21" r="15.9155" fill="none" stroke="var(--soft)" stroke-width="6"/>';
+  segs.forEach(s => { const p = s[0] / base * 100; if (p > 0) { arcs += '<circle cx="21" cy="21" r="15.9155" fill="none" stroke="' + s[1] + '" stroke-width="6" stroke-dasharray="' + p + ' ' + (100 - p) + '" stroke-dashoffset="' + (25 - off) + '"/>'; off += p; } });
+  const gp = gap(), gpct = Math.abs(gp.g) / base * 100, gs = (fix + pl) / base * 100;
+  if (gp.n && gpct > 0) {
+    let gl, gst;
+    if (gp.g > 0) { gl = Math.min(gpct, 100); gst = Math.min(gs, 100 - gl); }
+    else { gl = Math.min(gpct, pl / base * 100); gst = gs - gl; }
+    arcs += '<circle cx="21" cy="21" r="20" fill="none" stroke="' + (gp.g > 0 ? 'var(--neg)' : 'var(--eco)') + '" stroke-width="1.6" pathLength="100" stroke-dasharray="' + gl + ' ' + (100 - gl) + '" stroke-dashoffset="' + (25 - gst) + '"/>';
   }
-  const groups = {};
-  for (const t of list) (groups[t.date] ||= []).push(t);
-  el.innerHTML = Object.entries(groups).map(([date, items]) => {
-    const net = items.reduce((s, t) => s + (t.type === 'recette' ? t.amount : -t.amount), 0);
-    return `<div class="tx-day">
-      <p class="tx-day-label"><span>${dayLabel(date)}</span>
-      <span class="tx-day-sum ${net < 0 ? 'neg' : 'pos'}">${net < 0 ? '−' : '+'}${eur(Math.abs(net))}</span></p>
-      ${items.map((t, i) => txHTML(t, i)).join('')}</div>`;
-  }).join('');
+  $('#mlabel').textContent = mname();
+  $('#sum').innerHTML =
+    '<div class="pie"><div class="donut"><svg viewBox="0 0 42 42" role="img" aria-label="Répartition des revenus : frais fixes, dépenses prévues et reste">' + arcs + '</svg>' +
+    '<div class="mid"><span>' + (rest < 0 ? 'Déficit' : 'Reste à vivre') + '</span><b class="' + (rest < 0 ? 'neg' : 'pos') + '">' + fc0.format(rest) + '</b>' + (gp.n ? '<span class="' + (gp.g > 0 ? 'neg' : 'eco') + '">' + (gp.g > 0 ? '+' : '') + fc0.format(gp.g) + ' d’écart</span>' : '') + '</div></div>' +
+    '<div class="legend">' +
+    '<div><i style="background:transparent;border:2px solid var(--ink)"></i><span>Revenus</span><b>' + f(inc) + '</b></div>' +
+    '<div><i style="--c:var(--c1)"></i><span>Frais fixes</span><b>' + f(fix) + '</b></div>' +
+    '<div><i style="--c:var(--c2)"></i><span>Prévu</span><b>' + f(pl) + '</b></div>' +
+    '<div><i style="--c:var(--c3)"></i><span>Reste</span><b class="' + (rest < 0 ? 'neg' : '') + '">' + f(rest) + '</b></div>' +
+    (gp.n ? '<div><i style="background:transparent;border:2px solid ' + (gp.g > 0 ? 'var(--neg)' : 'var(--eco)') + '"></i><span>Anneau ext. : écart</span><b class="' + (gp.g > 0 ? 'neg' : 'eco') + '">' + (gp.g > 0 ? '+' : '') + f(gp.g) + '</b></div>' : '') + '</div></div>' +
+    '<div class="gap"><span>Écart réel / prévu</span>' + gapHtml() + '</div>';
 }
 
-function renderBudgets() {
-  const spent = spendByCat();
-  const totalB = Object.values(state.budgets).reduce((s, v) => s + (v || 0), 0);
-  const totalS = Object.values(spent).reduce((s, v) => s + v, 0);
-  $('#budget-list').innerHTML = CATS_DEP.map(c => {
-    const b = state.budgets[c.id] || 0, s = spent[c.id] || 0;
-    const pct = b > 0 ? s / b : (s > 0 ? 1 : 0), over = b > 0 && s > b;
-    return `<div class="b-row">
-      <span class="tx-ico sm" style="--c:${c.c}">${c.e}</span>
-      <div><div class="b-top"><b>${c.label}</b>
-        <span class="b-nums ${over ? 'over' : ''}">${eur(s)} <em>/ ${eur(b)}</em></span></div>
-      <div class="bar"><i style="background:${over ? 'var(--coral)' : c.c}" data-w="${Math.min(100, pct * 100)}"></i></div></div>
-    </div>`;
-  }).join('') + `<div class="b-total"><span>Budget total</span><b>${eur(totalS)} / ${eur(totalB)}</b></div>`;
-  animateBars('#budget-list');
+/* ---------- revenus / frais fixes ---------- */
+function listBlock(title, key, ph, note) {
+  const items = data[key], w = store.canWrite;
+  let h = '<section class="box"><h2>' + title + '</h2><p class="note">' + note + '</p>';
+  if (!items.length) h += '<p class="empty">Rien pour l’instant.' + (w ? ' Ajoutez une ligne ci-dessous.' : '') + '</p>';
+  items.forEach(it => {
+    h += '<div class="row"><div class="n">' + esc(it.name) + '</div><div class="a">' + f(it.amount) + '</div>' +
+      (w ? '<button class="x" data-del="' + key + '" data-id="' + it.id + '" aria-label="Supprimer ' + esc(it.name) + '">×</button>' : '') + '</div>';
+  });
+  h += '<div class="tot"><span>Total</span><span>' + f(sum(items, 'amount')) + '</span></div>';
+  if (w) h += '<form data-add="' + key + '"><input name="name" placeholder="' + ph + '" required maxlength="60" aria-label="Libellé"><input name="amount" type="number" inputmode="decimal" min="0" step="0.01" placeholder="Montant €" required aria-label="Montant en euros"><button type="submit">Ajouter</button></form>';
+  return h + '</section>';
 }
 
-function renderSplit() {
-  const spent = spendByCat();
-  const entries = Object.entries(spent).sort((a, b) => b[1] - a[1]);
-  const total = entries.reduce((s, [, v]) => s + v, 0);
-  if (!total) { $('#split-list').innerHTML = '<p class="muted">Aucune dépense ce mois-ci.</p>'; return; }
-  $('#split-list').innerHTML = entries.map(([id, v]) => {
-    const c = CAT[id] || CAT.autre, share = v / total * 100;
-    return `<div class="s-row"><span>${c.e}</span><span>${c.label}</span>
-      <div class="bar"><i style="background:${c.c}" data-w="${share}"></i></div>
-      <span class="s-val">${eur(v)}</span></div>`;
-  }).join('');
-  animateBars('#split-list');
+/* ---------- dépenses prévues (catégories du repo) ---------- */
+function renderPlans() {
+  const items = plans(), w = store.canWrite;
+  let h = '<section class="box"><h2>Dépenses prévues en ' + esc(mname()) + '</h2><p class="note">Indiquez ce que vous comptez dépenser, puis saisissez le montant réel au fil du mois.</p>';
+  if (!items.length) h += '<p class="empty">Aucune dépense prévue ce mois-ci.</p>';
+  items.forEach(it => {
+    const c = catOf(it.cat);
+    const d = it.real === '' || it.real == null ? null : (+it.real) - (+it.amount);
+    const dl = d === null ? '' : '<span class="delta ' + (d > 0 ? 'neg' : (d < 0 ? 'eco' : 'pos')) + '">' + (d > 0 ? '+' : '') + f(d) + '</span>';
+    h += '<div class="row"><div class="n">' + esc(it.name) + '<small>' + c.e + ' ' + esc(c.label) + ' · prévu ' + f(it.amount) + ' ' + dl + '</small></div>' +
+      '<input class="real" type="number" inputmode="decimal" min="0" step="0.01" placeholder="Réel" value="' + (it.real == null ? '' : it.real) + '" data-real="' + it.id + '"' + (w ? '' : ' disabled') + ' aria-label="Montant réel pour ' + esc(it.name) + '">' +
+      (w ? '<button class="x" data-del="plan" data-id="' + it.id + '" aria-label="Supprimer ' + esc(it.name) + '">×</button>' : '') + '</div>';
+  });
+  const real = items.reduce((t, x) => t + (x.real === '' || x.real == null ? 0 : +x.real), 0);
+  h += '<div class="tot"><span>Prévu</span><span>' + f(sum(items, 'amount')) + '</span></div>';
+  h += '<div class="tot" style="border-top:0;padding-top:4px"><span>Dépensé</span><span>' + f(real) + '</span></div>';
+  h += '<div class="tot" style="border-top:0;padding-top:4px"><span>Écart réel / prévu</span>' + gapHtml() + '</div>';
+  if (w) {
+    h += '<form data-add="plan"><input name="name" placeholder="Ex. Courses de la semaine" required maxlength="60" aria-label="Libellé"><select name="cat" aria-label="Catégorie">' + CATS.map(c => '<option value="' + c.id + '">' + c.e + ' ' + c.label + '</option>').join('') + '</select><input name="amount" type="number" inputmode="decimal" min="0" step="0.01" placeholder="Prévu €" required aria-label="Montant prévu en euros"><button type="submit">Ajouter</button></form>';
+    h += '<div class="foot"><button class="ghost" id="copy">Reprendre le mois précédent</button></div>';
+  }
+  return h + '</section>';
 }
 
-function animateBars(scope) {
-  requestAnimationFrame(() => requestAnimationFrame(() => {
-    document.querySelectorAll(scope + ' .bar i').forEach(i => i.style.width = i.dataset.w + '%');
-  }));
+/* ---------- bilan annuel ---------- */
+const MN = ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin', 'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.'];
+let yr = now0.getFullYear(), pFrom = 1, pTo = 12;
+function mdata(y, m) { const it = data.plans[y + '-' + String(m).padStart(2, '0')] || []; const d = { pl: sum(it, 'amount'), n: 0, real: 0, pf: 0 }; it.forEach(x => { if (x.real !== '' && x.real != null) { d.n++; d.real += +x.real; d.pf += +x.amount; } }); d.gap = d.real - d.pf; return d; }
+function gcls(g) { return g > 0 ? 'neg' : (g < 0 ? 'eco' : 'pos'); }
+function sg(g) { return (g > 0 ? '+' : '') + f(g); }
+function card(l, v, c) { return '<div class="card"><span>' + l + '</span><b class="' + (c || '') + '">' + v + '</b></div>'; }
+function rect(x, y, w, h, c) { return h > 0 ? '<rect x="' + x + '" y="' + y + '" width="' + w + '" height="' + h + '" fill="' + c + '" rx="2"/>' : ''; }
+function renderYear() {
+  const inc = sum(data.income, 'amount'), fix = sum(data.fixed, 'amount');
+  const ms = [];
+  for (let i = pFrom; i <= pTo; i++) ms.push({ m: i, d: mdata(yr, i) });
+  const N = ms.length; let tPl = 0, tGap = 0, tN = 0, tReal = 0;
+  ms.forEach(x => { tPl += x.d.pl; tGap += x.d.gap; tN += x.d.n; tReal += x.d.real; });
+  const tInc = inc * N, tFix = fix * N, tRest = tInc - tFix - tPl;
+  const presets = [['Année', 1, 12], ['T1', 1, 3], ['T2', 4, 6], ['T3', 7, 9], ['T4', 10, 12], ['S1', 1, 6], ['S2', 7, 12]];
+  const opts = sel => MN.map((n, k) => '<option value="' + (k + 1) + '"' + (k + 1 === sel ? ' selected' : '') + '>' + n + '</option>').join('');
+  const full = pFrom === 1 && pTo === 12;
+  let h = '<div class="month" style="margin-bottom:14px"><button class="ghost" data-yr="-1" aria-label="Année précédente">‹</button><b>' + yr + '</b><button class="ghost" data-yr="1" aria-label="Année suivante">›</button></div>';
+  h += '<section class="box"><h2>Période</h2><div class="presets">' + presets.map(p => '<button class="chip" data-preset="' + p[1] + '-' + p[2] + '" aria-pressed="' + (p[1] === pFrom && p[2] === pTo) + '">' + p[0] + '</button>').join('') + '</div>';
+  h += '<div class="per"><label>Du <select data-sel="from" aria-label="Premier mois">' + opts(pFrom) + '</select></label><label>au <select data-sel="to" aria-label="Dernier mois">' + opts(pTo) + '</select></label><span class="muted">' + N + ' mois</span></div></section>';
+  h += '<section class="box"><h2>Bilan ' + (full ? 'de ' + yr : MN[pFrom - 1] + ' – ' + MN[pTo - 1] + ' ' + yr) + '</h2><div class="cards">' + card('Revenus', f(tInc)) + card('Frais', f(tFix)) + card('Dépenses prévues', f(tPl)) + card('Reste prévisionnel', f(tRest), tRest < 0 ? 'neg' : 'pos') + '</div>' +
+    '<div class="gap"><span>Écart réel / prévu</span>' + (tN ? '<span><b class="' + gcls(tGap) + '">' + sg(tGap) + '</b> <span class="muted">' + (tGap > 0 ? 'dépassement' : (tGap < 0 ? 'économie' : 'pile dans le budget')) + '</span></span>' : '<span class="muted">Aucun montant réel saisi</span>') + '</div></section>';
+  let mx = Math.max(inc, 1);
+  ms.forEach(x => { mx = Math.max(mx, fix + x.d.pl, x.d.n ? fix + x.d.real : 0); });
+  const L = 62, R = 632, T = 14, B = 214, W = R - L, H = B - T, sw = W / N, bw = Math.min(sw * 0.38, 24);
+  const Y = v => B - v / mx * H;
+  let s = '<svg viewBox="0 0 640 244" role="img" aria-label="Frais et dépenses par mois, prévu et réel, comparés aux revenus" style="width:100%;min-width:480px;display:block">';
+  [0, 0.5, 1].forEach(t => { const y = Y(mx * t); s += '<line x1="' + L + '" x2="' + R + '" y1="' + y + '" y2="' + y + '" stroke="var(--line)"/><text x="' + (L - 6) + '" y="' + (y + 3) + '" text-anchor="end" font-size="10" fill="var(--muted)">' + fc0.format(mx * t) + '</text>'; });
+  ms.forEach((x, k) => {
+    const cx = L + sw * k + sw / 2, d = x.d;
+    s += rect(cx - bw - 1, Y(fix), bw, fix / mx * H, 'var(--c1)') + rect(cx - bw - 1, Y(fix + d.pl), bw, d.pl / mx * H, 'var(--c2)');
+    if (d.n) { const col = d.gap > 0 ? 'var(--neg)' : (d.gap < 0 ? 'var(--eco)' : 'var(--c3)'); s += rect(cx + 1, Y(fix), bw, fix / mx * H, 'var(--c1)') + rect(cx + 1, Y(fix + d.real), bw, d.real / mx * H, col); }
+    s += '<text x="' + cx + '" y="232" text-anchor="middle" font-size="10" fill="var(--muted)">' + MN[x.m - 1] + '</text>';
+  });
+  if (inc > 0) s += '<line x1="' + L + '" x2="' + R + '" y1="' + Y(inc) + '" y2="' + Y(inc) + '" stroke="var(--ink)" stroke-width="1.5" stroke-dasharray="4 3"/>';
+  s += '</svg>';
+  h += '<section class="box"><h2>Mois par mois</h2><p class="note">Pour chaque mois, la barre de gauche montre le prévu et celle de droite le réel. Le réel ne compte que les dépenses dont vous avez saisi le montant.</p><div class="scroll">' + s + '</div>' +
+    '<div class="lg"><span><i style="background:var(--c1)"></i>Frais</span><span><i style="background:var(--c2)"></i>Prévu</span><span><i style="background:var(--c3)"></i>Réel</span><span><i style="background:var(--neg)"></i>Réel au-dessus du prévu</span><span><i style="background:var(--eco)"></i>Réel sous le prévu</span><span><i class="dash"></i>Revenus</span></div></section>';
+  const rows = ms.map(x => { const d = x.d; return '<tr><td>' + MN[x.m - 1] + '</td><td>' + f(d.pl) + '</td><td>' + (d.n ? f(d.real) : '—') + '</td><td>' + (d.n ? '<span class="' + gcls(d.gap) + '">' + sg(d.gap) + '</span>' : '—') + '</td><td class="' + (inc - fix - d.pl < 0 ? 'neg' : '') + '">' + f(inc - fix - d.pl) + '</td></tr>'; }).join('');
+  h += '<section class="box"><h2>Détail</h2><div class="scroll"><table><thead><tr><th>Mois</th><th>Prévu</th><th>Réel</th><th>Écart</th><th>Reste prévu</th></tr></thead><tbody>' + rows + '</tbody><tfoot><tr><td>Total</td><td>' + f(tPl) + '</td><td>' + (tN ? f(tReal) : '—') + '</td><td>' + (tN ? '<span class="' + gcls(tGap) + '">' + sg(tGap) + '</span>' : '—') + '</td><td class="' + (tRest < 0 ? 'neg' : '') + '">' + f(tRest) + '</td></tr></tfoot></table></div></section>';
+  return h;
 }
 
-/* ---------- formulaire d'ajout ---------- */
-function buildCats() {
-  const list = state.type === 'depense' ? CATS_DEP : CATS_REC;
-  $('#tx-cats').innerHTML = list.map(c =>
-    `<button type="button" class="cat-chip ${c.id === state.cat ? 'on' : ''}" data-id="${c.id}" style="--c:${c.c}"><span>${c.e}</span>${c.label}</button>`
-  ).join('');
+/* ---------- rendu général ---------- */
+function render() {
+  renderSum();
+  $('#sum').style.display = tab === 'year' ? 'none' : '';
+  $('#prev').parentNode.style.display = tab === 'year' ? 'none' : '';
+  $('#t-fixes').setAttribute('aria-selected', tab === 'fixes');
+  $('#t-plans').setAttribute('aria-selected', tab === 'plans');
+  $('#t-year').setAttribute('aria-selected', tab === 'year');
+  $('#view').innerHTML = tab === 'fixes'
+    ? listBlock('Revenus', 'income', 'Ex. Salaire', 'Ce qui rentre chaque mois.') + listBlock('Frais', 'fixed', 'Ex. Loyer', 'Ce qui sort chaque mois : loyer, abonnements, assurances…')
+    : tab === 'plans' ? renderPlans() : renderYear();
 }
 
-$('#tx-seg').addEventListener('click', e => {
-  const b = e.target.closest('button[data-type]');
-  if (!b) return;
-  state.type = b.dataset.type;
-  state.cat = (state.type === 'depense' ? CATS_DEP : CATS_REC)[0].id;
-  $('#tx-seg').dataset.type = state.type;
-  document.querySelectorAll('#tx-seg button').forEach(x => x.classList.toggle('on', x === b));
-  buildCats();
+/* ---------- événements du budget ---------- */
+$('#prev').onclick = () => shift(-1);
+$('#next').onclick = () => shift(1);
+$('#t-fixes').onclick = () => { tab = 'fixes'; render(); };
+$('#t-plans').onclick = () => { tab = 'plans'; render(); };
+$('#t-year').onclick = () => { tab = 'year'; yr = +ym.slice(0, 4); render(); };
+const view = $('#view');
+view.addEventListener('click', e => {
+  let b = e.target.closest('[data-yr]');
+  if (b) { yr += +b.getAttribute('data-yr'); render(); return; }
+  b = e.target.closest('[data-preset]');
+  if (b) { const p = b.getAttribute('data-preset').split('-'); pFrom = +p[0]; pTo = +p[1]; render(); }
 });
-
-$('#tx-cats').addEventListener('click', e => {
-  const b = e.target.closest('.cat-chip');
-  if (!b) return;
-  state.cat = b.dataset.id;
-  document.querySelectorAll('.cat-chip').forEach(x => x.classList.toggle('on', x === b));
+view.addEventListener('change', e => {
+  const s = e.target.getAttribute && e.target.getAttribute('data-sel');
+  if (s) {
+    const v = +e.target.value;
+    if (s === 'from') { pFrom = v; if (pTo < v) pTo = v; } else { pTo = v; if (pFrom > v) pFrom = v; }
+    render(); return;
+  }
+  const id = e.target.getAttribute && e.target.getAttribute('data-real');
+  if (id) {
+    if (!store.canWrite) return;
+    plans().forEach(x => { if (x.id === id) x.real = e.target.value === '' ? '' : parseFloat(e.target.value); });
+    persist(); render();
+  }
 });
-
-$('#tx-form').addEventListener('submit', async e => {
+view.addEventListener('submit', e => {
   e.preventDefault();
-  if (!store.canWrite) return toast("Lecture seule : ajout impossible");
-  const amount = parseFloat($('#tx-amount').value.replace(',', '.'));
-  if (!amount || amount <= 0) return toast('Montant invalide');
-  try {
-    await store.saveTx({
-      type: state.type, amount: +amount.toFixed(2), cat: state.cat,
-      date: $('#tx-date').value || todayISO(),
-      note: $('#tx-note').value.trim(), ts: Date.now(),
-    });
-    await refresh();
-    $('#tx-amount').value = ''; $('#tx-note').value = '';
-    toast(state.type === 'depense' ? 'Dépense ajoutée ✦' : 'Recette ajoutée ✦');
-    if (window.innerWidth <= 980) { $('#add-card').classList.remove('open'); $('#fab').classList.remove('x'); }
-  } catch (err) { console.error(err); toast(err.message || "Ajout impossible — vérifiez votre connexion."); }
+  if (!store.canWrite) return toast('Lecture seule : ajout impossible');
+  const fm = e.target, k = fm.getAttribute('data-add');
+  const n = fm.elements.name.value.trim(), a = parseFloat(fm.elements.amount.value);
+  if (!n || isNaN(a) || a < 0) return;
+  if (k === 'plan') plans().push({ id: uid(), name: n, cat: fm.elements.cat.value, amount: a, real: '' });
+  else data[k].push({ id: uid(), name: n, amount: a });
+  persist(); render();
 });
-
-/* ---------- transactions : suppression + état vide ---------- */
-$('#tx-list').addEventListener('click', async e => {
-  const del = e.target.closest('.tx-del');
-  if (del) {
-    if (!store.canWrite) return toast("Lecture seule : suppression impossible");
-    try { await store.deleteTx(del.dataset.id); await refresh(); toast('Opération supprimée'); }
-    catch { toast('Suppression impossible.'); }
-    return;
+view.addEventListener('click', e => {
+  const b = e.target.closest('[data-del]');
+  if (b) {
+    if (!store.canWrite) return toast('Lecture seule : suppression impossible');
+    const k = b.getAttribute('data-del'), id = b.getAttribute('data-id');
+    if (k === 'plan') data.plans[ym] = plans().filter(x => x.id !== id);
+    else data[k] = data[k].filter(x => x.id !== id);
+    persist(); render(); return;
   }
-  if (e.target.id === 'empty-add') {
-    if (window.innerWidth <= 980) { $('#add-card').classList.add('open'); $('#fab').classList.add('x'); }
-    $('#tx-amount').focus();
-    return;
+  if (e.target.id === 'copy') {
+    if (!store.canWrite) return toast('Lecture seule : action impossible');
+    const p = ym.split('-'), d = new Date(+p[0], +p[1] - 2, 1), pk = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+    const src = data.plans[pk] || [];
+    if (!src.length) { alert('Aucune dépense prévue le mois précédent.'); return; }
+    src.forEach(x => { plans().push({ id: uid(), name: x.name, cat: x.cat, amount: x.amount, real: '' }); });
+    persist(); render();
   }
-  if (e.target.id === 'empty-seed') seedSamples();
 });
 
-async function seedSamples() {
-  if (!store.canWrite) return toast("Lecture seule : action impossible");
-  const y = state.month.getFullYear(), m = state.month.getMonth();
-  const now = new Date();
-  const maxDay = (y === now.getFullYear() && m === now.getMonth()) ? now.getDate() : 28;
-  const D = n => `${y}-${String(m + 1).padStart(2, '0')}-${String(Math.min(n, maxDay)).padStart(2, '0')}`;
-  const S = [
-    ['recette', 1850, 'salaire', 'Salaire', 1],
-    ['depense', 680, 'logement', 'Loyer', 2],
-    ['depense', 46.3, 'alimentation', 'Courses', 3],
-    ['depense', 84.5, 'transport', 'Pass Navigo', 3],
-    ['depense', 17.99, 'abonnements', 'Streaming', 5],
-    ['depense', 12.4, 'loisirs', 'Ciné', 6],
-    ['depense', 23.8, 'alimentation', 'Marché', 8],
-    ['depense', 9.9, 'abonnements', 'Musique', 9],
-    ['depense', 64.2, 'shopping', 'Veste', 11],
-    ['depense', 18.5, 'sante', 'Pharmacie', 12],
-    ['recette', 250, 'freelance', 'Mission', 14],
-    ['depense', 38.9, 'alimentation', 'Restaurant', 15],
-    ['depense', 27, 'loisirs', 'Concert', 18],
-    ['depense', 52.6, 'transport', 'Essence', 20],
-  ];
-  for (const [type, amount, cat, note, day] of S)
-    await store.saveTx({ type, amount, cat, note, date: D(day), ts: Date.now() + day });
-  await refresh();
-  toast("Données d'exemple chargées ✦");
-}
-
-/* ---------- budgets : modal ---------- */
-$('#edit-budgets').addEventListener('click', () => {
-  if (!store.canWrite) return toast("Lecture seule : modification impossible");
-  $('#budget-inputs').innerHTML = CATS_DEP.map(c =>
-    `<label class="bi"><span class="tx-ico sm" style="--c:${c.c}">${c.e}</span><span>${c.label}</span>
-     <input type="number" min="0" step="10" inputmode="numeric" data-id="${c.id}" value="${state.budgets[c.id] || 0}">
-     <span class="cur">€</span></label>`).join('');
-  $('#modal-budgets').hidden = false;
-});
-$('#mb-cancel').addEventListener('click', () => $('#modal-budgets').hidden = true);
-$('#modal-budgets').addEventListener('click', e => { if (e.target.id === 'modal-budgets') $('#modal-budgets').hidden = true; });
-$('#mb-save').addEventListener('click', async () => {
-  if (!store.canWrite) return toast("Lecture seule : modification impossible");
-  const b = {};
-  document.querySelectorAll('#budget-inputs input').forEach(i => b[i.dataset.id] = Math.max(0, +i.value || 0));
-  try { await store.saveBudgets(b); state.budgets = b; renderAll(); $('#modal-budgets').hidden = true; toast('Budgets enregistrés ✦'); }
-  catch { toast('Enregistrement impossible.'); }
-});
-
-/* ---------- navigation par mois ---------- */
-const shiftMonth = n => { state.month = new Date(state.month.getFullYear(), state.month.getMonth() + n, 1); renderAll(); };
-$('#m-prev').addEventListener('click', () => shiftMonth(-1));
-$('#m-next').addEventListener('click', () => shiftMonth(1));
-$('#m-label').addEventListener('click', () => { state.month = new Date(new Date().getFullYear(), new Date().getMonth(), 1); renderAll(); });
-
-/* ---------- COMPTES LIÉS : interface ---------- */
+/* ---------- COMPTES LIÉS : interface (conservée du repo) ---------- */
 function applyViewMode() {
   const link = store.currentLink;
   const readonly = !!link && link.permissions === 'read';
@@ -562,7 +453,6 @@ function applyViewMode() {
   document.querySelectorAll('#account-menu [data-view]').forEach(b =>
     b.classList.toggle('active', b.dataset.view === store.currentView));
 }
-
 function renderAccountMenu() {
   const list = $('#linked-accounts-list');
   if (!store.linkedAccounts.length) {
@@ -579,7 +469,6 @@ function renderAccountMenu() {
       <button class="unlink-btn" data-unlink="${l.id}" title="Rompre le lien" type="button">✕</button>
     </div>`).join('');
 }
-
 function openAccountMenu() {
   renderAccountMenu();
   applyViewMode();
@@ -591,7 +480,6 @@ function closeAccountMenu() {
   $('#account-menu').hidden = true;
   $('#account-btn').classList.remove('open');
 }
-
 $('#account-btn').addEventListener('click', e => {
   e.stopPropagation();
   $('#account-menu').hidden ? openAccountMenu() : closeAccountMenu();
@@ -599,7 +487,6 @@ $('#account-btn').addEventListener('click', e => {
 document.addEventListener('click', e => {
   if (!e.target.closest('.account-switcher')) closeAccountMenu();
 });
-
 $('#account-menu').addEventListener('click', async e => {
   const unlink = e.target.closest('[data-unlink]');
   if (unlink) {
@@ -654,7 +541,6 @@ async function checkPendingInvitations() {
     if (pending.length) showPendingInvitations(pending);
   } catch (err) { console.error('Vérification des invitations :', err); }
 }
-
 function showPendingInvitations(invitations) {
   const list = $('#pending-list');
   list.innerHTML = invitations.map(inv => `
@@ -664,12 +550,11 @@ function showPendingInvitations(invitations) {
         <div class="pending-permission">${inv.permissions === 'read' ? '👁️ Lecture seule' : '✏️ Lecture et écriture'}</div>
       </div>
       <div class="pending-actions">
-        <button class="btn-accept" data-id="${inv.id}" data-action="accept">Accepter</button>
+        <button data-id="${inv.id}" data-action="accept">Accepter</button>
         <button class="btn-refuse" data-id="${inv.id}" data-action="refuse">Refuser</button>
       </div>
     </div>`).join('');
   $('#modal-pending').hidden = false;
-
   list.querySelectorAll('button').forEach(btn => {
     btn.addEventListener('click', async () => {
       try {
@@ -694,7 +579,6 @@ document.querySelectorAll('.auth-tabs button').forEach(b => b.addEventListener('
   $('#auth-pass').autocomplete = authMode === 'login' ? 'current-password' : 'new-password';
   $('#auth-error').hidden = true;
 }));
-
 function frAuthError(err) {
   if (!USE_FIREBASE) return err.message || 'Erreur.';
   const map = {
@@ -709,7 +593,6 @@ function frAuthError(err) {
   };
   return map[err?.code] || err.message || 'Erreur inconnue.';
 }
-
 $('#auth-form').addEventListener('submit', async e => {
   e.preventDefault();
   const email = $('#auth-email').value.trim(), pass = $('#auth-pass').value;
@@ -728,9 +611,10 @@ $('#auth-form').addEventListener('submit', async e => {
     btn.textContent = authMode === 'login' ? 'Se connecter' : 'Créer mon compte';
   }
 });
-
 $('#logout-btn').addEventListener('click', async () => {
   await store.logout();
+  data = { income: [], fixed: [], plans: {} };
+  tab = 'fixes';
   $('#view-app').hidden = true;
   $('#view-auth').hidden = false;
   $('#auth-form').reset();
@@ -740,22 +624,20 @@ $('#logout-btn').addEventListener('click', async () => {
 
 /* ---------- cycle de vie ---------- */
 async function refresh() {
-  const d = await store.loadData();
-  state.txs = d.txs || [];
-  state.budgets = d.budgets || {};
-  renderAll();
+  try {
+    const d = await store.loadData();
+    data = { income: d.income || [], fixed: d.fixed || [], plans: d.plans || {} };
+    render();
+  } catch (err) { console.error(err); toast('Impossible de charger vos données (règles Firestore ?).'); }
 }
-
 async function loadAndEnter() {
-  try { await refresh(); } catch (err) { console.error(err); toast('Impossible de charger vos données (règles Firestore ?).'); }
   $('#user-chip').textContent = store.user.email || '';
   $('#demo-banner').hidden = USE_FIREBASE;
   $('#view-auth').hidden = true;
   $('#view-app').hidden = false;
-  $('#tx-date').value = todayISO();
-  buildCats();
   applyViewMode();
   renderAccountMenu();
+  await refresh();
 }
 
 /* ---------- installation PWA + service worker ---------- */
@@ -772,13 +654,6 @@ $('#install-btn').addEventListener('click', async () => {
 if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
   window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch(() => {}));
 }
-
-/* ---------- FAB (mobile) ---------- */
-$('#fab').addEventListener('click', () => {
-  if (!store.canWrite) return toast("Lecture seule : ajout impossible");
-  $('#add-card').classList.toggle('open');
-  $('#fab').classList.toggle('x');
-});
 
 /* ---------- toast ---------- */
 let toastTimer;
