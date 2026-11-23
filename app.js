@@ -1,7 +1,6 @@
-/* ═══════════ Mon budget mensuel — v4 : robuste ═══════════
-   Écritures ciblées + temps réel, flush des saisies, gestion des accès côté
-   propriétaire, mot de passe oublié, vérification e-mail, suppression annulable. */
+/* ═══════════ Mon budget mensuel — logique applicative ═══════════ */
 import { FIREBASE_CONFIG } from './firebase-config.js';
+import { initThemeUI, applyPrefs, getPrefs, readCache, setSaveState } from './theme.js';
 
 /* ---------- petits outils ---------- */
 const $ = s => document.querySelector(s);
@@ -58,7 +57,7 @@ function shift(d) { const p = ym.split('-'); const dt = new Date(+p[0], +p[1] - 
 function mname() { const p = ym.split('-'); return new Date(+p[0], +p[1] - 1, 1).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' }); }
 const planPayload = it => ({ name: it.name, cat: it.cat, amount: +it.amount || 0, real: it.real == null ? '' : it.real, month: it.month || ym, ts: it.ts || Date.now() });
 
-/* ---------- écritures suivies + flush : aucune frappe perdue ---------- */
+/* ---------- écritures suivies + flush ---------- */
 const inflight = new Set();
 async function write(fn) {
   const p = (async () => { await fn(); })();
@@ -84,7 +83,7 @@ window.addEventListener('pagehide', flushSaves);
 /* ---------- couche données ---------- */
 const store = {
   user: null, currentView: 'self', linkedAccounts: [], sharedWith: [], pendingSent: [],
-  _uids: {}, _unsubs: [], _targetUid: null, _recovering: false,
+  _uids: {}, _unsubs: [], _targetUid: null, _recovering: false, _prefsUnsub: null, _prefsTimer: null,
 
   async init() {
     if (USE_FIREBASE) {
@@ -149,7 +148,7 @@ const store = {
   get verified() { return !USE_FIREBASE || !!(this.user && this.user.emailVerified); },
 
   async logout() {
-    this.closeData();
+    this.closeData(); this.closePrefs();
     if (USE_FIREBASE) await F.authM.signOut(F.auth);
     else localStorage.removeItem('solde.session');
     this.user = null; this.linkedAccounts = []; this.sharedWith = []; this.pendingSent = [];
@@ -184,6 +183,36 @@ const store = {
     const res = { uid: snap.docs[0].id, email: d.email || email.trim() };
     this._uids[key] = res;
     return res;
+  },
+
+  /* ========== APPARENCE (par profil) ========== */
+  async openPrefs() {
+    this.closePrefs();
+    if (!USE_FIREBASE || !this.user) { setSaveState('Enregistré sur cet appareil'); return; }
+    const { doc, getDoc, setDoc, onSnapshot } = F.fsM;
+    const ref = doc(F.db, 'users', this.uid, 'meta', 'prefs');
+    try {
+      const snap = await getDoc(ref);
+      if (snap.exists()) applyPrefs(snap.data(), { notify: false });
+      else { await setDoc(ref, getPrefs(), { merge: true }); }
+      setSaveState('Enregistré sur votre profil ✓');
+    } catch (e) { console.warn('Préférences :', e); setSaveState('Lecture seule des réglages'); }
+    this._prefsUnsub = onSnapshot(ref, s => {
+      if (s.exists()) { applyPrefs(s.data(), { notify: false }); setSaveState('Enregistré sur votre profil ✓'); }
+    }, () => {});
+  },
+  closePrefs() { if (this._prefsUnsub) { try { this._prefsUnsub(); } catch (e) {} this._prefsUnsub = null; } },
+  queuePrefs(p) {
+    clearTimeout(this._prefsTimer);
+    if (!USE_FIREBASE || !this.user) { setSaveState('Enregistré sur cet appareil'); return; }
+    setSaveState('Enregistrement…');
+    this._prefsTimer = setTimeout(async () => {
+      try {
+        const { doc, setDoc } = F.fsM;
+        await setDoc(doc(F.db, 'users', this.uid, 'meta', 'prefs'), p, { merge: true });
+        setSaveState('Enregistré sur votre profil ✓');
+      } catch (e) { console.warn(e); setSaveState('Non enregistré — hors ligne ?'); }
+    }, 400);
   },
 
   /* ========== INVITATIONS ========== */
@@ -259,7 +288,6 @@ const store = {
     await this.loadSharedWith();
   },
 
-  /* comptes auxquels j'ai accès */
   async loadLinkedAccounts() {
     if (USE_FIREBASE) {
       const { collection, query, where, getDocs } = F.fsM;
@@ -271,7 +299,6 @@ const store = {
     }
   },
 
-  /* personnes qui ont accès à MON budget */
   async loadSharedWith() {
     if (!this.isSelf) { this.sharedWith = []; this.pendingSent = []; return; }
     if (USE_FIREBASE) {
@@ -301,7 +328,7 @@ const store = {
     await this.loadSharedWith();
   },
 
-  /* ========== DONNÉES : 1 document par ligne + temps réel ========== */
+  /* ========== DONNÉES ========== */
   _localKey() { return 'budget.data.' + this.viewEmail; },
   _saveLocal() { localStorage.setItem(this._localKey(), JSON.stringify(data)); },
   closeData() { this._unsubs.forEach(u => { try { u(); } catch (e) {} }); this._unsubs = []; this._targetUid = null; },
@@ -332,7 +359,7 @@ const store = {
         console.error('Synchro :', err);
         if (!this.isSelf && !this._recovering) {
           this._recovering = true;
-          toast("Accès retiré — retour à votre compte.");
+          toast('Accès retiré — retour à votre compte.');
           this.currentView = 'self';
           applyViewMode();
           this.openData().finally(() => { this._recovering = false; });
@@ -342,7 +369,6 @@ const store = {
     });
   },
 
-  /* migration automatique depuis l'ancien document unique */
   async migrateLegacy(targetUid) {
     if (!this.canWrite) return;
     const { doc, getDoc, writeBatch } = F.fsM;
@@ -383,7 +409,7 @@ const store = {
   },
 };
 
-/* ---------- erreurs en français ---------- */
+/* ---------- erreurs ---------- */
 function frErr(err) {
   const code = err && err.code;
   if (code === 'permission-denied') return "Refusé par les règles Firestore (lecture seule ou e-mail non vérifié ?).";
@@ -400,11 +426,11 @@ function frErr(err) {
   return map[code] || (err && err.message) || 'Erreur inconnue.';
 }
 
-/* ---------- écart réel / prévu ---------- */
+/* ---------- écart ---------- */
 function gap() { let g = 0, n = 0; plans().forEach(x => { if (x.real !== '' && x.real != null) { g += (+x.real) - (+x.amount); n++; } }); return { g, n }; }
 function gapHtml() { const r = gap(); if (!r.n) return '<span class="muted">Aucun montant réel saisi</span>'; const c = r.g > 0 ? 'neg' : (r.g < 0 ? 'eco' : 'pos'); const l = r.g > 0 ? 'dépassement' : (r.g < 0 ? 'économie' : 'pile dans le budget'); return '<span><b class="' + c + '">' + (r.g > 0 ? '+' : '') + f(r.g) + '</b> <span class="muted">' + l + '</span></span>'; }
 
-/* ---------- résumé (donut) ---------- */
+/* ---------- résumé ---------- */
 function renderSum() {
   const inc = sum(data.income, 'amount'), fix = sum(data.fixed, 'amount'), pl = sum(plans(), 'amount');
   const rest = inc - fix - pl;
@@ -432,7 +458,7 @@ function renderSum() {
     '<div class="gap"><span>Écart réel / prévu</span>' + gapHtml() + '</div>';
 }
 
-/* ---------- revenus / frais fixes ---------- */
+/* ---------- listes ---------- */
 function listBlock(title, key, ph, note) {
   const items = data[key], w = store.canWrite;
   let h = '<section class="box"><h2>' + title + '</h2><p class="note">' + note + '</p>';
@@ -446,7 +472,6 @@ function listBlock(title, key, ph, note) {
   return h + '</section>';
 }
 
-/* ---------- dépenses prévues ---------- */
 function renderPlans() {
   const items = plans(), w = store.canWrite;
   let h = '<section class="box"><h2>Dépenses prévues en ' + esc(mname()) + '</h2><p class="note">Indiquez ce que vous comptez dépenser, puis saisissez le montant réel au fil du mois.</p>';
@@ -470,7 +495,7 @@ function renderPlans() {
   return h + '</section>';
 }
 
-/* ---------- bilan annuel ---------- */
+/* ---------- bilan ---------- */
 const MN = ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin', 'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.'];
 let yr = now0.getFullYear(), pFrom = 1, pTo = 12;
 function mdata(y, m) { const it = data.plans[y + '-' + String(m).padStart(2, '0')] || []; const d = { pl: sum(it, 'amount'), n: 0, real: 0, pf: 0 }; it.forEach(x => { if (x.real !== '' && x.real != null) { d.n++; d.real += +x.real; d.pf += +x.amount; } }); d.gap = d.real - d.pf; return d; }
@@ -514,7 +539,7 @@ function renderYear() {
   return h;
 }
 
-/* ---------- rendu : on préserve la saisie en cours (temps réel) ---------- */
+/* ---------- rendu ---------- */
 function captureInputs() {
   const st = { forms: {}, real: null, focus: null };
   document.querySelectorAll('#view form[data-add]').forEach(fm => {
@@ -558,7 +583,7 @@ function render() {
   restoreInputs(st);
 }
 
-/* ---------- événements du budget ---------- */
+/* ---------- événements budget ---------- */
 $('#prev').onclick = () => shift(-1);
 $('#next').onclick = () => shift(1);
 $('#t-fixes').onclick = () => { tab = 'fixes'; render(); };
@@ -586,7 +611,7 @@ view.addEventListener('change', e => {
     if (v !== '' && isNaN(v)) return;
     plans().forEach(x => { if (x.id === id) x.real = v; });
     render();
-    write(() => store.updateItem('plans', id, { real: v }));   // écriture ciblée : un seul champ
+    write(() => store.updateItem('plans', id, { real: v }));
   }
 });
 view.addEventListener('submit', e => {
@@ -651,7 +676,7 @@ view.addEventListener('click', e => {
   }
 });
 
-/* ---------- comptes liés + accès accordés ---------- */
+/* ---------- comptes ---------- */
 function applyViewMode() {
   const link = store.currentLink;
   document.body.classList.toggle('readonly-mode', !!link && link.permissions === 'read');
@@ -881,6 +906,7 @@ $('#logout-btn').addEventListener('click', async () => {
   document.body.classList.remove('readonly-mode');
   $('#readonly-banner').hidden = true;
   $('#verify-banner').hidden = true;
+  setSaveState('Enregistré sur cet appareil');
 });
 
 /* ---------- cycle de vie ---------- */
@@ -892,6 +918,7 @@ async function loadAndEnter() {
   $('#view-app').hidden = false;
   applyViewMode();
   renderAccountMenu();
+  await store.openPrefs();
   try { await store.openData(); } catch (err) { console.error(err); toast(frErr(err)); }
   store.loadSharedWith().then(renderAccountMenu).catch(() => {});
 }
@@ -909,7 +936,7 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
   window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch(() => {}));
 }
 
-/* ---------- toast + annulation ---------- */
+/* ---------- toast ---------- */
 let toastTimer;
 function toast(msg) {
   const t = $('#toast');
@@ -926,6 +953,9 @@ function toastUndo(msg, onUndo) {
 }
 
 /* ---------- démarrage ---------- */
+applyPrefs(readCache(), { notify: false });
+initThemeUI({ onChange: p => store.queuePrefs(p), saveHint: 'Enregistré sur cet appareil' });
+
 (async function boot() {
   if (!USE_FIREBASE) $('#demo-hint').hidden = false;
   const u = await store.init();
