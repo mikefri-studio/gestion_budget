@@ -1,5 +1,5 @@
 /* Service worker — cache de l’application (fonctionnement hors-ligne) */
-const CACHE = 'solde-v3'; // incrémente (solde-v2…) à chaque mise à jour des fichiers
+const CACHE = 'budget-v1'; // incrémente (budget-v2…) à chaque mise à jour des fichiers
 const SHELL = ['./', './index.html', './styles.css', './app.js', './firebase-config.js', './manifest.webmanifest', './icon.svg'];
 
 self.addEventListener('install', e => {
