@@ -13,6 +13,15 @@ const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 
 const low = s => String(s || '').trim().toLowerCase();
 const deacc = s => low(s).normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 
+/* ---------- mois ---------- */
+const MMIN = '0000-01', MMAX = '9999-12';
+const mkey = (y, m) => `${y}-${String(m).padStart(2, '0')}`;
+const prevMonth = k => { const p = k.split('-'); const d = new Date(+p[0], +p[1] - 2, 1); return mkey(d.getFullYear(), d.getMonth() + 1); };
+const mlabel = k => { const p = k.split('-'); return new Date(+p[0], +p[1] - 1, 1).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' }); };
+const fromOf = it => it.from || MMIN;
+const toOf = it => it.to || MMAX;
+const applies = (it, k) => fromOf(it) <= k && toOf(it) >= k;
+
 /* ---------- catégories : dépenses prévues ---------- */
 const CATS = [
   { id: 'alimentation', label: 'Alimentation', e: '🥐',  c: '#E2B45A' },
@@ -29,29 +38,42 @@ const catOf = v => CAT[v] || CATS.find(c => c.label === v) || CAT.autre;
 
 /* ---------- catégories : frais fixes ---------- */
 const CATS_FIX = [
-  { id: 'logement',    label: 'Logement',        e: '🏠', c: '#7FB4E6', ex: 'Loyer, crédit immo, charges de copro' },
-  { id: 'energie',     label: 'Énergie & eau',   e: '⚡', c: '#E8B44A', ex: 'Électricité, gaz, eau, chauffage' },
-  { id: 'telecom',     label: 'Internet & mobile', e: '📱', c: '#5B8DEF', ex: 'Box, fibre, forfaits téléphone' },
-  { id: 'abonnements', label: 'Abonnements',     e: '📺', c: '#6FD6C7', ex: 'Streaming, apps, presse, licences' },
-  { id: 'assurances',  label: 'Assurances',      e: '🛡️', c: '#A78BFA', ex: 'Auto, habitation, prévoyance' },
-  { id: 'credits',     label: 'Crédits',         e: '🏦', c: '#D4A373', ex: 'Prêts, mensualités, revolving' },
-  { id: 'impots',      label: 'Impôts & taxes',  e: '🧾', c: '#8FBF9F', ex: 'Impôt sur le revenu, taxe foncière' },
-  { id: 'sante',       label: 'Santé & mutuelle', e: '💊', c: '#F2705C', ex: 'Mutuelle, soins réguliers' },
-  { id: 'transport',   label: 'Transport',       e: '🚇', c: '#59D69F', ex: 'Pass, essence, péage, leasing' },
-  { id: 'education',   label: 'Enfants & études', e: '🎓', c: '#C0CA6B', ex: 'Scolarité, cantine, garde, cours' },
-  { id: 'epargne',     label: 'Épargne',         e: '🐖', c: '#E98AC2', ex: 'Virement épargne, assurance vie' },
-  { id: 'autre',       label: 'Autre',           e: '📌', c: '#9DB3A6', ex: 'Tout le reste' },
+  { id: 'logement',    label: 'Logement',          e: '🏠', c: '#7FB4E6' },
+  { id: 'energie',     label: 'Énergie & eau',     e: '⚡', c: '#E8B44A' },
+  { id: 'telecom',     label: 'Internet & mobile', e: '📱', c: '#5B8DEF' },
+  { id: 'abonnements', label: 'Abonnements',       e: '📺', c: '#6FD6C7' },
+  { id: 'assurances',  label: 'Assurances',        e: '🛡️', c: '#A78BFA' },
+  { id: 'credits',     label: 'Crédits',           e: '🏦', c: '#D4A373' },
+  { id: 'impots',      label: 'Impôts & taxes',    e: '🧾', c: '#8FBF9F' },
+  { id: 'sante',       label: 'Santé & mutuelle',  e: '💊', c: '#F2705C' },
+  { id: 'transport',   label: 'Transport',         e: '🚇', c: '#59D69F' },
+  { id: 'education',   label: 'Enfants & études',  e: '🎓', c: '#C0CA6B' },
+  { id: 'epargne',     label: 'Épargne',           e: '🐖', c: '#E98AC2' },
+  { id: 'autre',       label: 'Autre',             e: '📌', c: '#9DB3A6' },
 ];
 const CAT_FIX = Object.fromEntries(CATS_FIX.map(c => [c.id, c]));
 const catFixOf = v => CAT_FIX[v] || CATS_FIX.find(c => c.label === v) || CAT_FIX.autre;
 
-/* reconnaissance automatique des lignes existantes */
+/* ---------- catégories : rentrées exceptionnelles ---------- */
+const CATS_EXT = [
+  { id: 'prime',         label: 'Prime & bonus',     e: '💼', c: '#E8B44A' },
+  { id: 'rappel',        label: 'Rappel de salaire', e: '🎁', c: '#D4A373' },
+  { id: 'remboursement', label: 'Remboursement',     e: '↩️', c: '#5B8DEF' },
+  { id: 'vente',         label: 'Vente',             e: '🏷️', c: '#6FD6C7' },
+  { id: 'cadeau',        label: 'Cadeau & don',      e: '🎀', c: '#E98AC2' },
+  { id: 'fiscal',        label: 'Impôts & aides',    e: '🧾', c: '#8FBF9F' },
+  { id: 'placement',     label: 'Intérêts & gains',  e: '📈', c: '#59D69F' },
+  { id: 'autre',         label: 'Autre',             e: '📌', c: '#9DB3A6' },
+];
+const CAT_EXT = Object.fromEntries(CATS_EXT.map(c => [c.id, c]));
+const catExtOf = v => CAT_EXT[v] || CATS_EXT.find(c => c.label === v) || CAT_EXT.autre;
+
 const FIX_HINTS = [
   ['epargne', ['assurance vie', 'livret', 'ldd', 'pel', 'pea', 'epargne', 'placement', 'investissement']],
   ['logement', ['loyer', 'location', 'bail', 'credit immo', 'pret immo', 'hypotheque', 'copro', 'syndic', 'logement', 'residence', 'charges']],
   ['energie', ['edf', 'engie', 'electricite', 'energie', 'gaz', 'eau', 'chauffage', 'veolia', 'suez', 'fioul', 'fuel']],
   ['telecom', ['internet', 'box', 'fibre', 'adsl', 'forfait', 'mobile', 'telephone', 'orange', 'sfr', 'bouygues', 'free', 'sosh', 'red by']],
-  ['abonnements', ['netflix', 'spotify', 'disney', 'prime', 'canal', 'deezer', 'apple music', 'youtube', 'streaming', 'abonnement', 'presse', 'magazine', 'journal', 'xbox', 'playstation', 'nintendo', 'icloud', 'google one', 'dropbox', 'adobe', 'microsoft', 'logiciel']],
+  ['abonnements', ['netflix', 'spotify', 'disney', 'prime video', 'canal', 'deezer', 'apple music', 'youtube', 'streaming', 'abonnement', 'presse', 'magazine', 'journal', 'xbox', 'playstation', 'nintendo', 'icloud', 'google one', 'dropbox', 'adobe', 'microsoft', 'logiciel']],
   ['assurances', ['assurance', 'maif', 'macif', 'axa', 'allianz', 'groupama', 'matmut', 'mma', 'gmf', 'maaf', 'prevoyance', 'responsabilite civile']],
   ['credits', ['credit', 'pret', 'mensualite', 'emprunt', 'revolving', 'sofinco', 'cetelem', 'cofidis', 'franfinance']],
   ['impots', ['impot', 'taxe', 'fonciere', 'dgfip', 'tresor public', 'redevance', 'habitation']],
@@ -64,7 +86,11 @@ function inferFixCat(name) {
   for (const [id, words] of FIX_HINTS) if (words.some(w => n.includes(w))) return id;
   return 'autre';
 }
-const fixCat = it => it.cat || inferFixCat(it.name);
+function catFor(kind, it) {
+  if (kind === 'fixed') return catFixOf(it.cat || inferFixCat(it.name));
+  if (kind === 'extra') return catExtOf(it.cat);
+  return catOf(it.cat);
+}
 
 /* ---------- Firebase ---------- */
 let USE_FIREBASE = /^AIza/.test(FIREBASE_CONFIG.apiKey || '');
@@ -89,34 +115,58 @@ if (USE_FIREBASE) {
 
 /* ---------- état ---------- */
 const now0 = new Date();
-let data = { income: [], fixed: [], plans: {} };
-let ym = `${now0.getFullYear()}-${String(now0.getMonth() + 1).padStart(2, '0')}`;
+let data = { income: [], fixed: [], plans: {}, extra: [] };
+let ym = mkey(now0.getFullYear(), now0.getMonth() + 1);
 let tab = 'fixes';
 let editing = null;
+let detail = null;
+
 const SORTS = [['amount-desc', 'Montant ↓'], ['amount-asc', 'Montant ↑'], ['name', 'Nom A→Z'], ['cat', 'Catégorie'], ['recent', 'Ajout récent']];
 let listView = {
   income: { group: false, sort: 'amount-desc', filter: 'all', q: '' },
   fixed:  { group: true,  sort: 'amount-desc', filter: 'all', q: '' },
+  extra:  { group: true,  sort: 'amount-desc', filter: 'all', q: '' },
 };
 const LIST_META = {
-  income: { title: 'Revenus', ph: 'Ex. Salaire', note: 'Ce qui rentre chaque mois.', cats: null },
-  fixed:  { title: 'Frais fixes', ph: 'Ex. Loyer, Netflix, assurance auto…', note: 'Ce qui sort chaque mois, classé par catégorie : logement, énergie, abonnements, assurances, crédits…', cats: CATS_FIX },
+  income: { title: 'Revenus', ph: 'Ex. Salaire', cats: null, versioned: true,
+    note: 'Ce qui rentre chaque mois. Un nouveau montant s’applique à partir du mois affiché et des suivants — jamais des précédents.' },
+  fixed:  { title: 'Frais fixes', ph: 'Ex. Loyer, Netflix, assurance auto…', cats: CATS_FIX, versioned: true,
+    note: 'Ce qui sort chaque mois, classé par catégorie. Un nouveau montant s’applique à partir du mois affiché et des suivants.' },
+  extra:  { title: 'Rentrées exceptionnelles', ph: 'Ex. Prime de fin d’année, vente, remboursement…', cats: CATS_EXT, versioned: false,
+    note: 'Une rentrée ponctuelle : un libellé, une catégorie, un montant. Elle ne compte que sur le mois affiché, sans prévu ni réel.' },
 };
+
 const plans = () => data.plans[ym] || (data.plans[ym] = []);
-function shift(d) { const p = ym.split('-'); const dt = new Date(+p[0], +p[1] - 1 + d, 1); ym = dt.getFullYear() + '-' + String(dt.getMonth() + 1).padStart(2, '0'); render(); }
-function mname() { const p = ym.split('-'); return new Date(+p[0], +p[1] - 1, 1).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' }); }
+const incomeAt = k => data.income.filter(it => applies(it, k));
+const fixedAt = k => data.fixed.filter(it => applies(it, k));
+const extraAt = k => data.extra.filter(it => it.month === k);
+const incAt = k => sum(incomeAt(k), 'amount') + sum(extraAt(k), 'amount');
+const fixAt = k => sum(fixedAt(k), 'amount');
+const extAt = k => sum(extraAt(k), 'amount');
+const listSource = kind => kind === 'income' ? incomeAt(ym) : kind === 'fixed' ? fixedAt(ym) : extraAt(ym);
+const chainOf = (kind, it) => data[kind].filter(x => (x.root || x.id) === (it.root || it.id));
+
+function shift(d) { const p = ym.split('-'); const dt = new Date(+p[0], +p[1] - 1 + d, 1); ym = mkey(dt.getFullYear(), dt.getMonth() + 1); editing = null; render(); }
+function mname() { return mlabel(ym); }
 const planPayload = it => ({ name: it.name, cat: it.cat, amount: +it.amount || 0, real: it.real == null ? '' : it.real, month: it.month || ym, ts: it.ts || Date.now() });
+function payloadOf(kind, it) {
+  const p = { name: it.name, amount: +it.amount || 0, ts: it.ts || Date.now() };
+  if (kind === 'fixed') p.cat = it.cat || inferFixCat(it.name);
+  if (kind === 'income' || kind === 'fixed') { p.from = it.from || null; p.to = it.to || null; p.root = it.root || it.id; }
+  if (kind === 'extra') { p.cat = it.cat || 'autre'; p.month = it.month || ym; }
+  return p;
+}
 
 function loadViewPrefs() {
   try {
     const p = JSON.parse(localStorage.getItem('budget.view.' + store.email) || 'null');
-    if (p) ['income', 'fixed'].forEach(k => { if (p[k]) listView[k] = { ...listView[k], ...p[k], q: '' }; });
+    if (p) Object.keys(listView).forEach(k => { if (p[k]) listView[k] = { ...listView[k], ...p[k], q: '' }; });
   } catch (e) {}
 }
 function saveViewPrefs() {
   try {
     const o = {};
-    ['income', 'fixed'].forEach(k => { const { group, sort, filter } = listView[k]; o[k] = { group, sort, filter }; });
+    Object.keys(listView).forEach(k => { const { group, sort, filter } = listView[k]; o[k] = { group, sort, filter }; });
     localStorage.setItem('budget.view.' + store.email, JSON.stringify(o));
   } catch (e) {}
 }
@@ -399,21 +449,19 @@ const store = {
 
   async openData() {
     this.closeData();
-    data = { income: [], fixed: [], plans: {} };
-    editing = null; this._fixDone = false;
+    data = { income: [], fixed: [], plans: {}, extra: [] };
+    editing = null; closeDetail(); this._fixDone = false;
     render();
     if (!USE_FIREBASE) {
       const d = JSON.parse(localStorage.getItem(this._localKey()) || 'null') || {};
-      data = { income: d.income || [], fixed: d.fixed || [], plans: d.plans || {} };
-      render();
-      this.categorizeFixed();
-      return;
+      data = { income: d.income || [], fixed: d.fixed || [], plans: d.plans || {}, extra: d.extra || [] };
+      render(); this.categorizeFixed(); return;
     }
     const targetUid = this.isSelf ? this.uid : (await this.resolveUser(this.currentView)).uid;
     this._targetUid = targetUid;
     try { await this.migrateLegacy(targetUid); } catch (e) { console.warn('Migration :', e); }
     const { collection, onSnapshot } = F.fsM;
-    ['income', 'fixed', 'plans'].forEach(kind => {
+    ['income', 'fixed', 'plans', 'extra'].forEach(kind => {
       const un = onSnapshot(collection(F.db, 'users', targetUid, kind), snap => {
         const items = snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => (a.ts || 0) - (b.ts || 0));
         if (kind === 'plans') {
@@ -423,6 +471,7 @@ const store = {
         } else data[kind] = items;
         render();
         if (kind === 'fixed') this.categorizeFixed();
+        if (detail) refreshDetail();
       }, err => {
         console.error('Synchro :', err);
         if (!this.isSelf && !this._recovering) {
@@ -447,8 +496,8 @@ const store = {
     if (old.migrated) return;
     const batch = writeBatch(F.db);
     const base = Date.now(); let n = 0;
-    (old.income || []).forEach(it => { if (it.id) batch.set(doc(F.db, 'users', targetUid, 'income', it.id), { name: it.name, amount: +it.amount || 0, ts: base + (n++) }); });
-    (old.fixed || []).forEach(it => { if (it.id) batch.set(doc(F.db, 'users', targetUid, 'fixed', it.id), { name: it.name, amount: +it.amount || 0, cat: it.cat || inferFixCat(it.name), ts: base + (n++) }); });
+    (old.income || []).forEach(it => { if (it.id) batch.set(doc(F.db, 'users', targetUid, 'income', it.id), { name: it.name, amount: +it.amount || 0, from: null, to: null, root: it.id, ts: base + (n++) }); });
+    (old.fixed || []).forEach(it => { if (it.id) batch.set(doc(F.db, 'users', targetUid, 'fixed', it.id), { name: it.name, amount: +it.amount || 0, cat: it.cat || inferFixCat(it.name), from: null, to: null, root: it.id, ts: base + (n++) }); });
     Object.keys(old.plans || {}).forEach(month => {
       (old.plans[month] || []).forEach(it => {
         if (it.id) batch.set(doc(F.db, 'users', targetUid, 'plans', it.id),
@@ -459,7 +508,6 @@ const store = {
     await batch.commit();
   },
 
-  /* catégorisation automatique des frais fixes sans catégorie */
   async categorizeFixed() {
     if (this._fixDone || !this.canWrite) return;
     const missing = data.fixed.filter(it => !it.cat);
@@ -493,6 +541,20 @@ const store = {
     if (USE_FIREBASE) { const { doc, deleteDoc } = F.fsM; await deleteDoc(doc(F.db, 'users', this._targetUid, kind, id)); }
     else this._saveLocal();
   },
+  async batchOps(kind, ops) {
+    this._check();
+    if (!ops.length) return;
+    if (!USE_FIREBASE) { this._saveLocal(); return; }
+    const { doc, writeBatch } = F.fsM;
+    const b = writeBatch(F.db);
+    ops.forEach(o => {
+      const ref = doc(F.db, 'users', this._targetUid, kind, o.id);
+      if (o.type === 'set') b.set(ref, o.fields);
+      else if (o.type === 'update') b.update(ref, o.fields);
+      else b.delete(ref);
+    });
+    await b.commit();
+  },
 };
 
 /* ---------- erreurs ---------- */
@@ -518,7 +580,7 @@ function gapHtml() { const r = gap(); if (!r.n) return '<span class="muted">Aucu
 
 /* ---------- résumé ---------- */
 function renderSum() {
-  const inc = sum(data.income, 'amount'), fix = sum(data.fixed, 'amount'), pl = sum(plans(), 'amount');
+  const inc = incAt(ym), fix = fixAt(ym), pl = sum(plans(), 'amount'), ext = extAt(ym);
   const rest = inc - fix - pl;
   const base = Math.max(inc, fix + pl, 1);
   const segs = [[fix, 'var(--c1)'], [pl, 'var(--c2)'], [Math.max(rest, 0), 'var(--c3)']];
@@ -534,9 +596,12 @@ function renderSum() {
   $('#mlabel').textContent = mname();
   $('#sum').innerHTML =
     '<div class="pie"><div class="donut"><svg viewBox="0 0 42 42" role="img" aria-label="Répartition des revenus : frais fixes, dépenses prévues et reste">' + arcs + '</svg>' +
-    '<div class="mid"><span>' + (rest < 0 ? 'Déficit' : 'Reste à vivre') + '</span><b class="' + (rest < 0 ? 'neg' : 'pos') + '">' + fc0.format(rest) + '</b>' + (gp.n ? '<span class="' + (gp.g > 0 ? 'neg' : 'eco') + '">' + (gp.g > 0 ? '+' : '') + fc0.format(gp.g) + ' d’écart</span>' : '') + '</div></div>' +
+    '<div class="mid"><span>' + (rest < 0 ? 'Déficit' : 'Reste à vivre') + '</span><b class="' + (rest < 0 ? 'neg' : 'pos') + '">' + fc0.format(rest) + '</b>' +
+    (ext > 0 ? '<span class="gold">+' + fc0.format(ext) + ' exceptionnel</span>' : '') +
+    (gp.n ? '<span class="' + (gp.g > 0 ? 'neg' : 'eco') + '">' + (gp.g > 0 ? '+' : '') + fc0.format(gp.g) + ' d’écart</span>' : '') + '</div></div>' +
     '<div class="legend">' +
     '<div><i style="background:transparent;border:2px solid var(--ink)"></i><span>Revenus</span><b>' + f(inc) + '</b></div>' +
+    (ext > 0 ? '<div class="lg-ext"><i style="--c:var(--gold)"></i><span>dont exceptionnel</span><b>' + f(ext) + '</b></div>' : '') +
     '<div><i style="--c:var(--c1)"></i><span>Frais fixes</span><b>' + f(fix) + '</b></div>' +
     '<div><i style="--c:var(--c2)"></i><span>Prévu</span><b>' + f(pl) + '</b></div>' +
     '<div><i style="--c:var(--c3)"></i><span>Reste</span><b class="' + (rest < 0 ? 'neg' : '') + '">' + f(rest) + '</b></div>' +
@@ -544,10 +609,10 @@ function renderSum() {
     '<div class="gap"><span>Écart réel / prévu</span>' + gapHtml() + '</div>';
 }
 
-/* ---------- listes : tri, filtre, recherche, édition ---------- */
-function sortItems(arr, mode, cats) {
+/* ---------- listes ---------- */
+function sortItems(arr, mode, kind, cats) {
   const a = [...arr];
-  const cn = it => cats ? catFixOf(fixCat(it)).label : '';
+  const cn = it => cats ? catFor(kind, it).label : '';
   if (mode === 'amount-asc') a.sort((x, y) => (+x.amount) - (+y.amount));
   else if (mode === 'name') a.sort((x, y) => String(x.name).localeCompare(String(y.name), 'fr'));
   else if (mode === 'cat') a.sort((x, y) => cn(x).localeCompare(cn(y), 'fr') || (+y.amount) - (+x.amount));
@@ -557,52 +622,67 @@ function sortItems(arr, mode, cats) {
 }
 
 function editHTML(kind, it) {
-  const cats = kind === 'fixed' ? CATS_FIX : kind === 'plans' ? CATS : null;
-  const cur = kind === 'fixed' ? fixCat(it) : cats ? catOf(it.cat).id : null;
+  const meta = LIST_META[kind];
+  const cats = meta ? meta.cats : CATS;
+  const cur = cats ? catFor(kind, it).id : null;
   const sel = cats ? '<select name="cat" aria-label="Catégorie">' + cats.map(c =>
     '<option value="' + c.id + '"' + (cur === c.id ? ' selected' : '') + '>' + c.e + ' ' + c.label + '</option>').join('') + '</select>' : '';
+  const scope = meta && meta.versioned
+    ? '<p class="fx-scope">Le montant s’appliquera à <b>' + esc(mname()) + '</b> et aux mois suivants. Les mois précédents gardent leurs montants ; le libellé et la catégorie sont mis à jour partout.</p>'
+    : '';
   return '<form class="fx-edit" data-edit="' + kind + '" data-id="' + it.id + '">' +
     '<input name="name" value="' + esc(it.name) + '" required maxlength="60" aria-label="Libellé">' + sel +
     '<input name="amount" type="number" inputmode="decimal" min="0" step="0.01" value="' + (+it.amount || 0) + '" required aria-label="Montant en euros">' +
     '<button type="submit" title="Enregistrer">✓</button>' +
-    '<button type="button" class="ghost" data-cancel-edit>Annuler</button></form>';
+    '<button type="button" class="ghost" data-cancel-edit>Annuler</button>' + scope + '</form>';
 }
 
 function rowHTML(kind, it, showCat) {
   if (editing && editing.kind === kind && editing.id === it.id) return editHTML(kind, it);
-  const w = store.canWrite;
-  const c = kind === 'fixed' ? catFixOf(fixCat(it)) : null;
+  const w = store.canWrite, meta = LIST_META[kind], cats = meta.cats;
+  const c = cats ? catFor(kind, it) : null;
   const dot = c ? c.c : 'var(--pos)';
-  const small = showCat && c ? '<small>' + c.e + ' ' + esc(c.label) + '</small>' : '';
+  const badges = [];
+  if (meta.versioned) {
+    if (it.from === ym) badges.push('<span class="vbadge new">à partir de ce mois</span>');
+    if (chainOf(kind, it).length > 1) badges.push('<span class="vbadge hist">🕘 historique</span>');
+  }
+  const smallParts = [];
+  if (showCat && c) smallParts.push(c.e + ' ' + esc(c.label));
+  if (badges.length) smallParts.push(badges.join(' '));
+  const small = smallParts.length ? '<small>' + smallParts.join(' · ') + '</small>' : '';
+  const label = meta.versioned
+    ? '<button type="button" class="nlink" data-detail="' + kind + '" data-id="' + it.id + '" title="Voir le détail et l’historique">' + esc(it.name) + '</button>'
+    : esc(it.name);
   return '<div class="row"><span class="fx-dot" style="background:' + dot + '"></span>' +
-    '<div class="n">' + esc(it.name) + small + '</div><div class="a">' + f(it.amount) + '</div>' +
+    '<div class="n">' + label + small + '</div><div class="a">' + f(it.amount) + '</div>' +
     (w ? '<button class="x edit" data-edit-btn="' + kind + '" data-id="' + it.id + '" title="Modifier" aria-label="Modifier ' + esc(it.name) + '">✎</button>' +
-      '<button class="x" data-del="' + kind + '" data-id="' + it.id + '" aria-label="Supprimer ' + esc(it.name) + '">×</button>' : '') + '</div>';
+      '<button class="x" data-del="' + kind + '" data-id="' + it.id + '" title="' + (meta.versioned ? 'Arrêter à partir de ce mois' : 'Supprimer') + '" aria-label="Supprimer ' + esc(it.name) + '">×</button>' : '') + '</div>';
 }
 
-function fxBar(items) {
+function catBar(kind, items) {
   const g = {};
-  items.forEach(it => { const c = fixCat(it); g[c] = (g[c] || 0) + (+it.amount || 0); });
+  items.forEach(it => { const c = catFor(kind, it).id; g[c] = (g[c] || 0) + (+it.amount || 0); });
   const e = Object.entries(g).sort((a, b) => b[1] - a[1]);
   const t = e.reduce((s, [, v]) => s + v, 0);
   if (!t) return '';
-  return '<div class="fx-bar" role="img" aria-label="Répartition des frais fixes par catégorie">' +
-    e.map(([id, v]) => { const c = catFixOf(id); return '<i style="width:' + (v / t * 100).toFixed(2) + '%;background:' + c.c + '" title="' + esc(c.label) + ' — ' + f(v) + '"></i>'; }).join('') + '</div>';
+  return '<div class="fx-bar" role="img" aria-label="Répartition par catégorie">' +
+    e.map(([id, v]) => { const c = catFor(kind, { cat: id, name: '' }); return '<i style="width:' + (v / t * 100).toFixed(2) + '%;background:' + c.c + '" title="' + esc(c.label) + ' — ' + f(v) + '"></i>'; }).join('') + '</div>';
 }
 
 function renderList(kind) {
   const meta = LIST_META[kind], w = store.canWrite, st = listView[kind], cats = meta.cats;
-  const all = data[kind];
+  const all = listSource(kind);
   const counts = {};
-  if (cats) all.forEach(it => { const c = fixCat(it); counts[c] = (counts[c] || 0) + 1; });
+  if (cats) all.forEach(it => { const c = catFor(kind, it).id; counts[c] = (counts[c] || 0) + 1; });
   if (cats && st.filter !== 'all' && !counts[st.filter]) st.filter = 'all';
   const q = st.q.trim().toLowerCase();
   let items = all.filter(it => {
     if (q && !String(it.name).toLowerCase().includes(q)) return false;
-    if (cats && st.filter !== 'all' && fixCat(it) !== st.filter) return false;
+    if (cats && st.filter !== 'all' && catFor(kind, it).id !== st.filter) return false;
     return true;
   });
-  items = sortItems(items, st.sort, cats);
+  items = sortItems(items, st.sort, kind, cats);
   const shown = sum(items, 'amount'), totalAll = sum(all, 'amount');
 
   let h = '<section class="box"><h2>' + meta.title + '</h2><p class="note">' + meta.note + '</p>';
@@ -615,18 +695,18 @@ function renderList(kind) {
       '</div>';
     if (cats) {
       h += '<div class="fx-chips"><button type="button" class="chip" data-filter="' + kind + '" data-cat="all" aria-pressed="' + (st.filter === 'all') + '">Tous · ' + all.length + '</button>' +
-        CATS_FIX.filter(c => counts[c.id]).map(c =>
+        cats.filter(c => counts[c.id]).map(c =>
           '<button type="button" class="chip" data-filter="' + kind + '" data-cat="' + c.id + '" aria-pressed="' + (st.filter === c.id) + '"><i style="background:' + c.c + '"></i>' + c.e + ' ' + c.label + ' · ' + counts[c.id] + '</button>').join('') + '</div>';
-      h += fxBar(all);
+      h += catBar(kind, all);
     }
   }
-  if (!all.length) h += '<p class="empty">Rien pour l’instant.' + (w ? ' Ajoutez une ligne ci-dessous.' : '') + '</p>';
+  if (!all.length) h += '<p class="empty">' + (kind === 'extra' ? 'Aucune rentrée exceptionnelle en ' + esc(mname()) + '.' : 'Rien pour l’instant.') + (w ? ' Ajoutez une ligne ci-dessous.' : '') + '</p>';
   else if (!items.length) h += '<p class="empty">Aucune ligne ne correspond à cette recherche.</p>';
   else if (cats && st.group) {
     const groups = {};
-    items.forEach(it => { const c = fixCat(it); (groups[c] || (groups[c] = [])).push(it); });
+    items.forEach(it => { const c = catFor(kind, it).id; (groups[c] || (groups[c] = [])).push(it); });
     Object.keys(groups).sort((a, b) => sum(groups[b], 'amount') - sum(groups[a], 'amount')).forEach(cid => {
-      const c = catFixOf(cid), g = groups[cid];
+      const c = catFor(kind, { cat: cid, name: '' }), g = groups[cid];
       h += '<div class="fx-group"><span class="fx-dot" style="background:' + c.c + '"></span>' +
         '<span class="fx-gname">' + c.e + ' ' + esc(c.label) + '</span>' +
         '<span class="fx-gcount">' + g.length + '</span><b>' + f(sum(g, 'amount')) + '</b></div>';
@@ -640,8 +720,24 @@ function renderList(kind) {
     const sel = cats ? '<select name="cat" aria-label="Catégorie">' + cats.map(c => '<option value="' + c.id + '">' + c.e + ' ' + c.label + '</option>').join('') + '</select>' : '';
     h += '<form data-add="' + kind + '"><input name="name" placeholder="' + meta.ph + '" required maxlength="60" aria-label="Libellé">' + sel +
       '<input name="amount" type="number" inputmode="decimal" min="0" step="0.01" placeholder="Montant €" required aria-label="Montant en euros"><button type="submit">Ajouter</button></form>';
+    if (meta.versioned) h += '<p class="note fx-foot">Ajoutée à partir de <b>' + esc(mname()) + '</b> et des mois suivants.</p>';
+    else h += '<p class="note fx-foot">Comptée uniquement en <b>' + esc(mname()) + '</b>.</p>';
   }
   return h + '</section>';
+}
+
+function renderExtraTab() {
+  const year = +ym.slice(0, 4);
+  const months = [];
+  for (let m = 1; m <= 12; m++) { const k = mkey(year, m); const t = extAt(k); if (t > 0) months.push({ k, m, t }); }
+  const total = months.reduce((s, x) => s + x.t, 0);
+  let strip = '';
+  if (months.length) {
+    strip = '<section class="box"><h2>Sur ' + year + '</h2><p class="note">' + f(total) + ' de rentrées exceptionnelles réparties sur ' + months.length + ' mois. Cliquez un mois pour y aller.</p><div class="ext-strip">' +
+      months.map(x => '<button type="button" class="ext-chip' + (x.k === ym ? ' on' : '') + '" data-goto="' + x.k + '"><span>' + MN[x.m - 1] + '</span><b>' + f(x.t) + '</b></button>').join('') +
+      '</div></section>';
+  }
+  return renderList('extra') + strip;
 }
 
 /* ---------- dépenses prévues ---------- */
@@ -673,70 +769,91 @@ function renderPlans() {
 /* ---------- bilan ---------- */
 const MN = ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin', 'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.'];
 let yr = now0.getFullYear(), pFrom = 1, pTo = 12;
-function mdata(y, m) { const it = data.plans[y + '-' + String(m).padStart(2, '0')] || []; const d = { pl: sum(it, 'amount'), n: 0, real: 0, pf: 0 }; it.forEach(x => { if (x.real !== '' && x.real != null) { d.n++; d.real += +x.real; d.pf += +x.amount; } }); d.gap = d.real - d.pf; return d; }
+function mdata(y, m) {
+  const k = mkey(y, m);
+  const it = data.plans[k] || [];
+  const d = { k, inc: incAt(k), fix: fixAt(k), ext: extAt(k), pl: sum(it, 'amount'), n: 0, real: 0, pf: 0 };
+  it.forEach(x => { if (x.real !== '' && x.real != null) { d.n++; d.real += +x.real; d.pf += +x.amount; } });
+  d.gap = d.real - d.pf; d.rest = d.inc - d.fix - d.pl;
+  return d;
+}
 function gcls(g) { return g > 0 ? 'neg' : (g < 0 ? 'eco' : 'pos'); }
 function sg(g) { return (g > 0 ? '+' : '') + f(g); }
 function card(l, v, c) { return '<div class="card"><span>' + l + '</span><b class="' + (c || '') + '">' + v + '</b></div>'; }
 function rect(x, y, w, h, c) { return h > 0 ? '<rect x="' + x + '" y="' + y + '" width="' + w + '" height="' + h + '" fill="' + c + '" rx="2"/>' : ''; }
 
-function renderFixSplit(N) {
-  const items = data.fixed;
-  if (!items.length) return '';
+function periodSplit(kind, ms) {
   const g = {};
-  items.forEach(it => { const c = fixCat(it); g[c] = (g[c] || 0) + (+it.amount || 0); });
+  ms.forEach(x => {
+    const src = kind === 'fixed' ? fixedAt(x.k) : extraAt(x.k);
+    src.forEach(it => { const c = catFor(kind, it).id; g[c] = (g[c] || 0) + (+it.amount || 0); });
+  });
   const e = Object.entries(g).sort((a, b) => b[1] - a[1]);
-  const t = e.reduce((s, [, v]) => s + v, 0) || 1;
-  const bar = '<div class="fx-bar lg" role="img" aria-label="Répartition des frais fixes par catégorie">' +
-    e.map(([id, v]) => { const c = catFixOf(id); return '<i style="width:' + (v / t * 100).toFixed(2) + '%;background:' + c.c + '" title="' + esc(c.label) + '"></i>'; }).join('') + '</div>';
+  const t = e.reduce((s, [, v]) => s + v, 0);
+  if (!t) return '';
+  const bar = '<div class="fx-bar lg" role="img" aria-label="Répartition par catégorie">' +
+    e.map(([id, v]) => { const c = catFor(kind, { cat: id, name: '' }); return '<i style="width:' + (v / t * 100).toFixed(2) + '%;background:' + c.c + '" title="' + esc(c.label) + '"></i>'; }).join('') + '</div>';
   const legend = e.map(([id, v]) => {
-    const c = catFixOf(id);
+    const c = catFor(kind, { cat: id, name: '' });
     return '<div class="fx-lrow"><span class="fx-dot" style="background:' + c.c + '"></span>' +
-      '<span class="fx-lname">' + c.e + ' ' + esc(c.label) + '</span><b>' + f(v * N) + '</b>' +
+      '<span class="fx-lname">' + c.e + ' ' + esc(c.label) + '</span><b>' + f(v) + '</b>' +
       '<span class="fx-lpct">' + Math.round(v / t * 100) + ' %</span></div>';
   }).join('');
-  return '<section class="box"><h2>Répartition des frais fixes</h2>' +
-    '<p class="note">' + f(t) + ' par mois, soit ' + f(t * N) + ' sur la période (' + N + ' mois).</p>' +
-    bar + '<div class="fx-legend">' + legend + '</div></section>';
+  const title = kind === 'fixed' ? 'Répartition des frais fixes' : 'Rentrées exceptionnelles par nature';
+  const sub = kind === 'fixed'
+    ? f(t) + ' sur la période, mois par mois selon les montants en vigueur.'
+    : f(t) + ' sur la période (' + ms.length + ' mois).';
+  return '<section class="box"><h2>' + title + '</h2><p class="note">' + sub + '</p>' + bar + '<div class="fx-legend">' + legend + '</div></section>';
 }
 
 function renderYear() {
-  const inc = sum(data.income, 'amount'), fix = sum(data.fixed, 'amount');
   const ms = [];
   for (let i = pFrom; i <= pTo; i++) ms.push({ m: i, d: mdata(yr, i) });
-  const N = ms.length; let tPl = 0, tGap = 0, tN = 0, tReal = 0;
-  ms.forEach(x => { tPl += x.d.pl; tGap += x.d.gap; tN += x.d.n; tReal += x.d.real; });
-  const tInc = inc * N, tFix = fix * N, tRest = tInc - tFix - tPl;
+  const N = ms.length;
+  let tInc = 0, tFix = 0, tPl = 0, tGap = 0, tN = 0, tReal = 0, tExt = 0;
+  ms.forEach(x => { tInc += x.d.inc; tFix += x.d.fix; tPl += x.d.pl; tGap += x.d.gap; tN += x.d.n; tReal += x.d.real; tExt += x.d.ext; });
+  const tRest = tInc - tFix - tPl;
   const presets = [['Année', 1, 12], ['T1', 1, 3], ['T2', 4, 6], ['T3', 7, 9], ['T4', 10, 12], ['S1', 1, 6], ['S2', 7, 12]];
   const opts = sel => MN.map((n, k) => '<option value="' + (k + 1) + '"' + (k + 1 === sel ? ' selected' : '') + '>' + n + '</option>').join('');
   const full = pFrom === 1 && pTo === 12;
   let h = '<div class="month" style="margin-bottom:14px"><button class="ghost" data-yr="-1" aria-label="Année précédente">‹</button><b>' + yr + '</b><button class="ghost" data-yr="1" aria-label="Année suivante">›</button></div>';
   h += '<section class="box"><h2>Période</h2><div class="presets">' + presets.map(p => '<button class="chip" data-preset="' + p[1] + '-' + p[2] + '" aria-pressed="' + (p[1] === pFrom && p[2] === pTo) + '">' + p[0] + '</button>').join('') + '</div>';
   h += '<div class="per"><label>Du <select data-sel="from" aria-label="Premier mois">' + opts(pFrom) + '</select></label><label>au <select data-sel="to" aria-label="Dernier mois">' + opts(pTo) + '</select></label><span class="muted">' + N + ' mois</span></div></section>';
-  h += '<section class="box"><h2>Bilan ' + (full ? 'de ' + yr : MN[pFrom - 1] + ' – ' + MN[pTo - 1] + ' ' + yr) + '</h2><div class="cards">' + card('Revenus', f(tInc)) + card('Frais', f(tFix)) + card('Dépenses prévues', f(tPl)) + card('Reste prévisionnel', f(tRest), tRest < 0 ? 'neg' : 'pos') + '</div>' +
+  h += '<section class="box"><h2>Bilan ' + (full ? 'de ' + yr : MN[pFrom - 1] + ' – ' + MN[pTo - 1] + ' ' + yr) + '</h2><div class="cards">' +
+    card('Revenus', f(tInc)) + card('Frais fixes', f(tFix)) + card('Dépenses prévues', f(tPl)) +
+    (tExt > 0 ? card('Dont exceptionnel', f(tExt), 'gold') : '') +
+    card('Reste prévisionnel', f(tRest), tRest < 0 ? 'neg' : 'pos') + '</div>' +
     '<div class="gap"><span>Écart réel / prévu</span>' + (tN ? '<span><b class="' + gcls(tGap) + '">' + sg(tGap) + '</b> <span class="muted">' + (tGap > 0 ? 'dépassement' : (tGap < 0 ? 'économie' : 'pile dans le budget')) + '</span></span>' : '<span class="muted">Aucun montant réel saisi</span>') + '</div></section>';
-  h += renderFixSplit(N);
-  let mx = Math.max(inc, 1);
-  ms.forEach(x => { mx = Math.max(mx, fix + x.d.pl, x.d.n ? fix + x.d.real : 0); });
+  h += periodSplit('fixed', ms);
+  if (tExt > 0) h += periodSplit('extra', ms);
+
+  let mx = 1;
+  ms.forEach(x => { mx = Math.max(mx, x.d.inc, x.d.fix + x.d.pl, x.d.n ? x.d.fix + x.d.real : 0); });
   const L = 62, R = 632, T = 14, B = 214, W = R - L, H = B - T, sw = W / N, bw = Math.min(sw * 0.38, 24);
   const Y = v => B - v / mx * H;
-  let s = '<svg viewBox="0 0 640 244" role="img" aria-label="Frais et dépenses par mois, prévu et réel, comparés aux revenus" style="width:100%;min-width:480px;display:block">';
+  let s = '<svg viewBox="0 0 640 244" role="img" aria-label="Frais et dépenses par mois, prévu et réel, comparés aux revenus du mois" style="width:100%;min-width:480px;display:block">';
   [0, 0.5, 1].forEach(t => { const y = Y(mx * t); s += '<line x1="' + L + '" x2="' + R + '" y1="' + y + '" y2="' + y + '" stroke="var(--line)"/><text x="' + (L - 6) + '" y="' + (y + 3) + '" text-anchor="end" font-size="10" fill="var(--muted)">' + fc0.format(mx * t) + '</text>'; });
   ms.forEach((x, k) => {
     const cx = L + sw * k + sw / 2, d = x.d;
-    s += rect(cx - bw - 1, Y(fix), bw, fix / mx * H, 'var(--c1)') + rect(cx - bw - 1, Y(fix + d.pl), bw, d.pl / mx * H, 'var(--c2)');
-    if (d.n) { const col = d.gap > 0 ? 'var(--neg)' : (d.gap < 0 ? 'var(--eco)' : 'var(--c3)'); s += rect(cx + 1, Y(fix), bw, fix / mx * H, 'var(--c1)') + rect(cx + 1, Y(fix + d.real), bw, d.real / mx * H, col); }
+    s += rect(cx - bw - 1, Y(d.fix), bw, d.fix / mx * H, 'var(--c1)') + rect(cx - bw - 1, Y(d.fix + d.pl), bw, d.pl / mx * H, 'var(--c2)');
+    if (d.n) { const col = d.gap > 0 ? 'var(--neg)' : (d.gap < 0 ? 'var(--eco)' : 'var(--c3)'); s += rect(cx + 1, Y(d.fix), bw, d.fix / mx * H, 'var(--c1)') + rect(cx + 1, Y(d.fix + d.real), bw, d.real / mx * H, col); }
+    if (d.ext > 0) s += '<circle cx="' + cx + '" cy="' + (Y(d.inc) - 7) + '" r="3" fill="var(--gold)"><title>' + esc(MN[x.m - 1]) + ' : ' + f(d.ext) + ' exceptionnel</title></circle>';
     s += '<text x="' + cx + '" y="232" text-anchor="middle" font-size="10" fill="var(--muted)">' + MN[x.m - 1] + '</text>';
   });
-  if (inc > 0) s += '<line x1="' + L + '" x2="' + R + '" y1="' + Y(inc) + '" y2="' + Y(inc) + '" stroke="var(--ink)" stroke-width="1.5" stroke-dasharray="4 3"/>';
+  if (ms.some(x => x.d.inc > 0)) {
+    let dpath = '';
+    ms.forEach((x, k) => { const x0 = L + sw * k, x1 = L + sw * (k + 1), y = Y(x.d.inc); dpath += (k === 0 ? 'M' + x0 + ' ' + y : 'L' + x0 + ' ' + y) + 'L' + x1 + ' ' + y; });
+    s += '<path d="' + dpath + '" fill="none" stroke="var(--ink)" stroke-width="1.5" stroke-dasharray="4 3"/>';
+  }
   s += '</svg>';
-  h += '<section class="box"><h2>Mois par mois</h2><p class="note">Pour chaque mois, la barre de gauche montre le prévu et celle de droite le réel. Le réel ne compte que les dépenses dont vous avez saisi le montant.</p><div class="scroll">' + s + '</div>' +
-    '<div class="lg"><span><i style="background:var(--c1)"></i>Frais</span><span><i style="background:var(--c2)"></i>Prévu</span><span><i style="background:var(--c3)"></i>Réel</span><span><i style="background:var(--neg)"></i>Réel au-dessus du prévu</span><span><i style="background:var(--eco)"></i>Réel sous le prévu</span><span><i class="dash"></i>Revenus</span></div></section>';
-  const rows = ms.map(x => { const d = x.d; return '<tr><td>' + MN[x.m - 1] + '</td><td>' + f(d.pl) + '</td><td>' + (d.n ? f(d.real) : '—') + '</td><td>' + (d.n ? '<span class="' + gcls(d.gap) + '">' + sg(d.gap) + '</span>' : '—') + '</td><td class="' + (inc - fix - d.pl < 0 ? 'neg' : '') + '">' + f(inc - fix - d.pl) + '</td></tr>'; }).join('');
-  h += '<section class="box"><h2>Détail</h2><div class="scroll"><table><thead><tr><th>Mois</th><th>Prévu</th><th>Réel</th><th>Écart</th><th>Reste prévu</th></tr></thead><tbody>' + rows + '</tbody><tfoot><tr><td>Total</td><td>' + f(tPl) + '</td><td>' + (tN ? f(tReal) : '—') + '</td><td>' + (tN ? '<span class="' + gcls(tGap) + '">' + sg(tGap) + '</span>' : '—') + '</td><td class="' + (tRest < 0 ? 'neg' : '') + '">' + f(tRest) + '</td></tr></tfoot></table></div></section>';
+  h += '<section class="box"><h2>Mois par mois</h2><p class="note">Barre de gauche : le prévu. Barre de droite : le réel (uniquement les dépenses saisies). La ligne pointillée suit les revenus de chaque mois, rentrées exceptionnelles incluses — un point doré signale un mois avec une rentrée exceptionnelle.</p><div class="scroll">' + s + '</div>' +
+    '<div class="lg"><span><i style="background:var(--c1)"></i>Frais</span><span><i style="background:var(--c2)"></i>Prévu</span><span><i style="background:var(--c3)"></i>Réel</span><span><i style="background:var(--neg)"></i>Réel au-dessus du prévu</span><span><i style="background:var(--eco)"></i>Réel sous le prévu</span><span><i style="background:var(--gold);border-radius:50%"></i>Rentrée exceptionnelle</span><span><i class="dash"></i>Revenus du mois</span></div></section>';
+  const rows = ms.map(x => { const d = x.d; return '<tr><td>' + MN[x.m - 1] + '</td><td>' + f(d.inc) + '</td><td>' + f(d.fix) + '</td><td>' + f(d.pl) + '</td><td>' + (d.n ? f(d.real) : '—') + '</td><td>' + (d.n ? '<span class="' + gcls(d.gap) + '">' + sg(d.gap) + '</span>' : '—') + '</td><td class="' + (d.rest < 0 ? 'neg' : '') + '">' + f(d.rest) + '</td></tr>'; }).join('');
+  h += '<section class="box"><h2>Détail</h2><div class="scroll"><table class="wide"><thead><tr><th>Mois</th><th>Revenus</th><th>Frais</th><th>Prévu</th><th>Réel</th><th>Écart</th><th>Reste</th></tr></thead><tbody>' + rows + '</tbody><tfoot><tr><td>Total</td><td>' + f(tInc) + '</td><td>' + f(tFix) + '</td><td>' + f(tPl) + '</td><td>' + (tN ? f(tReal) : '—') + '</td><td>' + (tN ? '<span class="' + gcls(tGap) + '">' + sg(tGap) + '</span>' : '—') + '</td><td class="' + (tRest < 0 ? 'neg' : '') + '">' + f(tRest) + '</td></tr></tfoot></table></div></section>';
   return h;
 }
 
-/* ---------- rendu : préservation de la saisie ---------- */
+/* ---------- préservation de la saisie ---------- */
 function formKey(fm) {
   return fm.hasAttribute('data-edit') ? 'edit:' + fm.getAttribute('data-id') : 'add:' + fm.getAttribute('data-add');
 }
@@ -751,9 +868,7 @@ function captureInputs() {
     ['name', 'amount', 'cat'].forEach(n => { const el = fm.elements[n]; if (el) o[n] = el.value; });
     st.forms[formKey(fm)] = o;
   });
-  document.querySelectorAll('#view [data-search]').forEach(el => {
-    st.search = { kind: el.getAttribute('data-search'), value: el.value };
-  });
+  document.querySelectorAll('#view [data-search]').forEach(el => { st.search = { kind: el.getAttribute('data-search'), value: el.value }; });
   const ae = document.activeElement;
   if (ae && ae.dataset && ae.dataset.real) { st.real = { id: ae.dataset.real, value: ae.value }; st.focus = { real: ae.dataset.real }; }
   else if (ae && ae.getAttribute && ae.getAttribute('data-search')) st.focus = { search: ae.getAttribute('data-search') };
@@ -784,21 +899,139 @@ function render() {
   renderSum();
   $('#sum').style.display = tab === 'year' ? 'none' : '';
   $('#prev').parentNode.style.display = tab === 'year' ? 'none' : '';
-  $('#t-fixes').setAttribute('aria-selected', tab === 'fixes');
-  $('#t-plans').setAttribute('aria-selected', tab === 'plans');
-  $('#t-year').setAttribute('aria-selected', tab === 'year');
+  ['fixes', 'extra', 'plans', 'year'].forEach(t => $('#t-' + t).setAttribute('aria-selected', String(tab === t)));
   const v = $('#view');
   v.className = 'tab-' + tab;
-  v.innerHTML = tab === 'fixes'
-    ? renderList('income') + renderList('fixed')
+  v.innerHTML = tab === 'fixes' ? renderList('income') + renderList('fixed')
+    : tab === 'extra' ? renderExtraTab()
     : tab === 'plans' ? renderPlans() : renderYear();
   restoreInputs(st);
+}
+
+/* ---------- tiroir de détail ---------- */
+function refreshDetail() { if (detail) openDetail(detail.kind, detail.id, true); }
+function openDetail(kind, id, keepFocus) {
+  const it = data[kind].find(x => x.id === id);
+  if (!it) { closeDetail(); return; }
+  detail = { kind, id };
+  const chain = chainOf(kind, it).sort((a, b) => fromOf(a).localeCompare(fromOf(b)));
+  const c = kind === 'fixed' ? catFor('fixed', it) : null;
+  $('#dd-title').innerHTML = (c ? c.e + ' ' : '💶 ') + esc(it.name);
+  let h = '<p class="note">' + (kind === 'fixed' ? 'Frais fixe' : 'Revenu récurrent') + ' · mois affiché : <b>' + esc(mname()) + '</b></p>';
+  h += '<div class="dd-cur"><span>Montant ce mois</span><b>' + f(it.amount) + '</b></div>';
+  h += '<h3 class="dd-h">Historique des montants</h3><div class="dd-timeline">';
+  chain.forEach(v => {
+    const cur = v.id === it.id;
+    const from = v.from ? mlabel(v.from) : 'depuis toujours';
+    const to = v.to ? ' → ' + mlabel(v.to) : ' → en cours';
+    h += '<div class="dd-ver' + (cur ? ' cur' : '') + '"><span class="dd-dot"></span><div class="dd-vmain"><b>' + f(v.amount) + '</b><small>' + esc(from) + esc(to) + '</small></div>' + (cur ? '<span class="dd-tag">ce mois</span>' : '') + '</div>';
+  });
+  h += '</div>';
+  h += '<p class="tip">Modifier le montant ou arrêter cette ligne n’affecte que <b>' + esc(mname()) + '</b> et les mois suivants. Les mois précédents conservent leurs montants.</p>';
+  $('#dd-body').innerHTML = h;
+  $('#dd-foot').innerHTML = store.canWrite
+    ? '<button class="ghost" type="button" id="dd-edit">✎ Modifier à partir de ce mois</button>' +
+      '<button class="ghost" type="button" id="dd-stop">⏹ Arrêter à partir de ce mois</button>' +
+      '<button class="ghost danger" type="button" id="dd-purge">🗑 Supprimer partout</button>'
+    : '<span class="note">Lecture seule — aucune modification possible.</span>';
+  const dr = $('#detail-drawer'), sc = $('#detail-scrim');
+  dr.classList.add('open'); sc.classList.add('open'); dr.removeAttribute('inert');
+  if (store.canWrite) {
+    $('#dd-edit').onclick = () => { closeDetail(); editing = { kind, id }; render(); const fm = document.querySelector('#view form[data-edit][data-id="' + id + '"]'); if (fm && fm.elements.name) { try { fm.elements.name.focus(); fm.elements.name.select(); } catch (e) {} } };
+    $('#dd-stop').onclick = () => { closeDetail(); doStop(kind, it); };
+    $('#dd-purge').onclick = () => { if (confirm('Supprimer cette ligne pour tous les mois, y compris l’historique ?')) { closeDetail(); doPurge(kind, it); } };
+  }
+  if (!keepFocus) setTimeout(() => { try { $('#dd-close').focus(); } catch (e) {} }, 60);
+}
+function closeDetail() {
+  detail = null;
+  const dr = $('#detail-drawer'), sc = $('#detail-scrim');
+  if (!dr) return;
+  dr.classList.remove('open'); sc.classList.remove('open'); dr.setAttribute('inert', '');
+}
+$('#dd-close').addEventListener('click', closeDetail);
+$('#detail-scrim').addEventListener('click', closeDetail);
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && detail) closeDetail(); });
+
+/* ---------- mutations récurrentes ---------- */
+function doStop(kind, it) {
+  if (!store.canWrite) return toast('Lecture seule : modification impossible');
+  const arr = data[kind], i = arr.findIndex(x => x.id === it.id);
+  if (i < 0) return;
+  const full = it.from === ym;
+  const prevTo = it.to || null;
+  const payload = payloadOf(kind, it);
+  if (full) arr.splice(i, 1); else it.to = prevMonth(ym);
+  render();
+  write(() => full ? store.deleteItem(kind, it.id) : store.updateItem(kind, it.id, { to: prevMonth(ym) }));
+  toastUndo(full ? 'Ligne supprimée' : 'Arrêtée à partir de ' + mname(), () => {
+    if (full) data[kind].push(it); else it.to = prevTo;
+    render();
+    write(() => full ? store.addItem(kind, it.id, payload) : store.updateItem(kind, it.id, { to: prevTo }));
+  });
+}
+function doPurge(kind, it) {
+  if (!store.canWrite) return toast('Lecture seule : modification impossible');
+  const root = it.root || it.id;
+  const chain = data[kind].filter(x => (x.root || x.id) === root);
+  if (!chain.length) return;
+  const payloads = chain.map(x => ({ id: x.id, fields: payloadOf(kind, x) }));
+  data[kind] = data[kind].filter(x => (x.root || x.id) !== root);
+  render();
+  write(() => store.batchOps(kind, chain.map(x => ({ type: 'delete', id: x.id }))));
+  toastUndo(chain.length + ' version' + (chain.length > 1 ? 's' : '') + ' supprimée' + (chain.length > 1 ? 's' : ''), () => {
+    chain.forEach(x => data[kind].push(x));
+    render();
+    write(() => store.batchOps(kind, payloads.map(p => ({ type: 'set', id: p.id, fields: p.fields }))));
+  });
+}
+function commitRecurringEdit(kind, it, fields) {
+  const chain = chainOf(kind, it);
+  const meta = { name: fields.name };
+  if (fields.cat) meta.cat = fields.cat;
+  const amountChanged = +fields.amount !== +it.amount;
+
+  if (!amountChanged) {
+    chain.forEach(v => Object.assign(v, meta));
+    render();
+    write(() => store.batchOps(kind, chain.map(v => ({ type: 'update', id: v.id, fields: meta }))));
+    toast('Ligne mise à jour ✦');
+    return;
+  }
+  if (it.from === ym) {
+    Object.assign(it, fields);
+    chain.forEach(v => { if (v.id !== it.id) Object.assign(v, meta); });
+    render();
+    write(() => store.batchOps(kind, chain.map(v => ({ type: 'update', id: v.id, fields: v.id === it.id ? fields : meta }))));
+    toast('Montant mis à jour à partir de ' + mname() + ' ✦');
+    return;
+  }
+  const prevTo = it.to || null, nid = uid(), root = it.root || it.id;
+  const nv = { id: nid, name: fields.name, amount: +fields.amount, from: ym, to: null, root, ts: Date.now() };
+  if (fields.cat) nv.cat = fields.cat;
+  const stop = prevMonth(ym);
+  it.to = stop;
+  chain.forEach(v => { if (v.id !== it.id) Object.assign(v, meta); });
+  data[kind].push(nv);
+  render();
+  const ops = chain.filter(v => v.id !== it.id).map(v => ({ type: 'update', id: v.id, fields: meta }));
+  ops.push({ type: 'update', id: it.id, fields: Object.assign({}, meta, { to: stop }) });
+  ops.push({ type: 'set', id: nid, fields: payloadOf(kind, nv) });
+  write(() => store.batchOps(kind, ops));
+  toastUndo('Montant modifié à partir de ' + mname(), () => {
+    data[kind] = data[kind].filter(x => x.id !== nid);
+    it.to = prevTo;
+    render();
+    write(() => store.batchOps(kind, [{ type: 'delete', id: nid }, { type: 'update', id: it.id, fields: { to: prevTo } }]));
+  });
 }
 
 /* ---------- événements budget ---------- */
 $('#prev').onclick = () => shift(-1);
 $('#next').onclick = () => shift(1);
+$('#mlabel').addEventListener('click', () => { const n = new Date(); ym = mkey(n.getFullYear(), n.getMonth() + 1); editing = null; render(); });
 $('#t-fixes').onclick = () => { tab = 'fixes'; editing = null; render(); };
+$('#t-extra').onclick = () => { tab = 'extra'; editing = null; render(); };
 $('#t-plans').onclick = () => { tab = 'plans'; editing = null; render(); };
 $('#t-year').onclick = () => { tab = 'year'; editing = null; yr = +ym.slice(0, 4); render(); };
 
@@ -808,7 +1041,9 @@ view.addEventListener('click', e => {
   let b = e.target.closest('[data-yr]');
   if (b) { yr += +b.getAttribute('data-yr'); render(); return; }
   b = e.target.closest('[data-preset]');
-  if (b) { const p = b.getAttribute('data-preset').split('-'); pFrom = +p[0]; pTo = +p[1]; render(); }
+  if (b) { const p = b.getAttribute('data-preset').split('-'); pFrom = +p[0]; pTo = +p[1]; render(); return; }
+  b = e.target.closest('[data-goto]');
+  if (b) { ym = b.getAttribute('data-goto'); render(); }
 });
 
 view.addEventListener('click', e => {
@@ -816,6 +1051,8 @@ view.addEventListener('click', e => {
   if (g) { const k = g.getAttribute('data-group'); listView[k].group = !listView[k].group; saveViewPrefs(); render(); return; }
   const fl = e.target.closest('[data-filter]');
   if (fl) { const k = fl.getAttribute('data-filter'); listView[k].filter = fl.getAttribute('data-cat'); saveViewPrefs(); render(); return; }
+  const dt = e.target.closest('[data-detail]');
+  if (dt) { openDetail(dt.getAttribute('data-detail'), dt.getAttribute('data-id')); return; }
   const eb = e.target.closest('[data-edit-btn]');
   if (eb) {
     if (!store.canWrite) return toast('Lecture seule : modification impossible');
@@ -828,9 +1065,7 @@ view.addEventListener('click', e => {
   if (e.target.closest('[data-cancel-edit]')) { editing = null; render(); }
 });
 
-view.addEventListener('keydown', e => {
-  if (e.key === 'Escape' && editing) { editing = null; render(); }
-});
+view.addEventListener('keydown', e => { if (e.key === 'Escape' && editing) { editing = null; render(); } });
 
 view.addEventListener('input', e => {
   const k = e.target.getAttribute && e.target.getAttribute('data-search');
@@ -857,25 +1092,27 @@ view.addEventListener('change', e => {
   }
 });
 
-function saveEdit(fm) {
-  if (!store.canWrite) return toast('Lecture seule : modification impossible');
-  const kind = fm.getAttribute('data-edit'), id = fm.getAttribute('data-id');
-  const n = fm.elements.name.value.trim(), a = parseFloat(fm.elements.amount.value);
-  if (!n || isNaN(a) || a < 0) return toast('Libellé et montant valides requis');
-  const fields = { name: n, amount: a };
-  if (fm.elements.cat) fields.cat = fm.elements.cat.value;
-  const arr = kind === 'plans' ? plans() : data[kind];
-  const it = arr.find(x => x.id === id);
-  if (it) Object.assign(it, fields);
-  editing = null; render();
-  write(() => store.updateItem(kind, id, fields));
-  toast('Ligne modifiée ✦');
-}
-
 view.addEventListener('submit', e => {
   e.preventDefault();
   const fm = e.target;
-  if (fm.hasAttribute('data-edit')) return saveEdit(fm);
+  if (fm.hasAttribute('data-edit')) {
+    if (!store.canWrite) return toast('Lecture seule : modification impossible');
+    const kind = fm.getAttribute('data-edit'), id = fm.getAttribute('data-id');
+    const n = fm.elements.name.value.trim(), a = parseFloat(fm.elements.amount.value);
+    if (!n || isNaN(a) || a < 0) return toast('Libellé et montant valides requis');
+    const fields = { name: n, amount: a };
+    if (fm.elements.cat) fields.cat = fm.elements.cat.value;
+    const arr = kind === 'plans' ? plans() : data[kind];
+    const it = arr.find(x => x.id === id);
+    if (!it) { editing = null; render(); return; }
+    editing = null;
+    if (kind === 'income' || kind === 'fixed') { commitRecurringEdit(kind, it, fields); return; }
+    Object.assign(it, fields);
+    render();
+    write(() => store.updateItem(kind, id, fields));
+    toast('Ligne modifiée ✦');
+    return;
+  }
   if (!store.canWrite) return toast('Lecture seule : ajout impossible');
   const k = fm.getAttribute('data-add');
   const n = fm.elements.name.value.trim(), a = parseFloat(fm.elements.amount.value);
@@ -887,15 +1124,19 @@ view.addEventListener('submit', e => {
     plans().push({ id, name: n, cat, amount: a, real: '', month: ym, ts });
     render();
     write(() => store.addItem('plans', id, { name: n, cat, amount: a, real: '', month: ym, ts }));
-  } else if (k === 'fixed') {
+  } else if (k === 'extra') {
     const cat = fm.elements.cat.value;
-    data.fixed.push({ id, name: n, amount: a, cat, ts });
+    data.extra.push({ id, name: n, cat, amount: a, month: ym, ts });
     render();
-    write(() => store.addItem('fixed', id, { name: n, amount: a, cat, ts }));
+    write(() => store.addItem('extra', id, { name: n, cat, amount: a, month: ym, ts }));
+    toast('Rentrée exceptionnelle ajoutée à ' + mname() + ' ✦');
   } else {
-    data[k].push({ id, name: n, amount: a, ts });
+    const item = { id, name: n, amount: a, from: ym, to: null, root: id, ts };
+    if (k === 'fixed') item.cat = fm.elements.cat.value;
+    data[k].push(item);
     render();
-    write(() => store.addItem(k, id, { name: n, amount: a, ts }));
+    write(() => store.addItem(k, id, payloadOf(k, item)));
+    toast('Ajoutée à partir de ' + mname() + ' ✦');
   }
 });
 
@@ -914,33 +1155,34 @@ view.addEventListener('click', e => {
         render();
         write(() => store.addItem('plans', item.id, planPayload(item)));
       });
-    } else {
-      const arr = data[k], i = arr.findIndex(x => x.id === id);
+    } else if (k === 'extra') {
+      const i = data.extra.findIndex(x => x.id === id);
       if (i < 0) return;
-      const item = arr[i]; arr.splice(i, 1); editing = null; render();
-      write(() => store.deleteItem(k, id));
-      toastUndo('Ligne supprimée', () => {
-        data[k].push(item); render();
-        const payload = { name: item.name, amount: item.amount, ts: item.ts || Date.now() };
-        if (k === 'fixed') payload.cat = fixCat(item);
-        write(() => store.addItem(k, item.id, payload));
+      const item = data.extra[i]; data.extra.splice(i, 1); editing = null; render();
+      write(() => store.deleteItem('extra', id));
+      toastUndo('Rentrée supprimée', () => {
+        data.extra.push(item); render();
+        write(() => store.addItem('extra', item.id, payloadOf('extra', item)));
       });
+    } else {
+      const it = data[k].find(x => x.id === id);
+      if (it) { editing = null; doStop(k, it); }
     }
     return;
   }
   if (e.target.id === 'copy') {
     if (!store.canWrite) return toast('Lecture seule : action impossible');
-    const p = ym.split('-'), d = new Date(+p[0], +p[1] - 2, 1), pk = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+    const pk = prevMonth(ym);
     const src = data.plans[pk] || [];
     if (!src.length) { alert('Aucune dépense prévue le mois précédent.'); return; }
     const jobs = [];
     src.forEach((x, i) => {
       const id = uid(), ts = Date.now() + i;
       plans().push({ id, name: x.name, cat: x.cat, amount: x.amount, real: '', month: ym, ts });
-      jobs.push(() => store.addItem('plans', id, { name: x.name, cat: x.cat, amount: x.amount, real: '', month: ym, ts }));
+      jobs.push({ type: 'set', id, fields: { name: x.name, cat: x.cat, amount: x.amount, real: '', month: ym, ts } });
     });
     render();
-    write(async () => { for (const j of jobs) await j(); });
+    write(() => store.batchOps('plans', jobs));
   }
 });
 
@@ -1166,8 +1408,8 @@ $('#verify-done').addEventListener('click', async () => {
 
 $('#logout-btn').addEventListener('click', async () => {
   await store.logout();
-  data = { income: [], fixed: [], plans: {} };
-  tab = 'fixes'; editing = null;
+  data = { income: [], fixed: [], plans: {}, extra: [] };
+  tab = 'fixes'; editing = null; closeDetail();
   $('#view-app').hidden = true;
   $('#view-auth').hidden = false;
   $('#auth-form').reset();
