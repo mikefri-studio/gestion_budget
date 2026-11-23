@@ -1,12 +1,24 @@
 <!doctype html>
-<html lang="fr">
+<html lang="fr" data-theme="chaleureux" data-mode="light" data-density="normal" data-contrast="normal">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Mon budget mensuel</title>
   <meta name="description" content="Revenus, frais fixes, dépenses prévues et bilan — synchronisés et partageables.">
-  <meta name="theme-color" content="#EEF3F4" media="(prefers-color-scheme: light)">
-  <meta name="theme-color" content="#0F1B1E" media="(prefers-color-scheme: dark)">
+  <script>
+  (function(){try{
+    var p=JSON.parse(localStorage.getItem('budget.prefs.last')||'{}');
+    var d=p.mode==='dark'||((!p.mode||p.mode==='auto')&&matchMedia('(prefers-color-scheme: dark)').matches);
+    var r=document.documentElement;
+    r.dataset.theme=p.theme||'chaleureux'; r.dataset.mode=d?'dark':'light';
+    r.dataset.density=p.density||'normal'; r.dataset.contrast=p.contrast?'high':'normal';
+    r.style.setProperty('--r',(p.radius==null?12:p.radius)+'px');
+    r.style.setProperty('--ts',String({s:0.94,m:1,l:1.08}[p.text||'m']));
+    if(p.accent!=null){var l=d?64:38;r.style.setProperty('--accent','hsl('+p.accent+' 62% '+l+'%)');
+      r.style.setProperty('--soft',d?'hsl('+p.accent+' 26% 21%)':'hsl('+p.accent+' 56% 92%)');
+      r.style.setProperty('--c2','hsl('+p.accent+' 62% '+l+'%)');}
+  }catch(e){}})();
+  </script>
   <link rel="manifest" href="./manifest.webmanifest">
   <link rel="icon" href="./icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="./icon.svg">
@@ -23,8 +35,11 @@
   <div id="view-auth">
     <main class="auth-wrap">
       <div class="auth-card">
-        <h1>Mon budget mensuel</h1>
-        <p class="note">Connectez-vous pour retrouver votre budget sur tous vos appareils.</p>
+        <div class="auth-top">
+          <h1>Mon budget mensuel</h1>
+          <button class="ghost" type="button" data-theme-open title="Apparence" aria-label="Changer l'apparence">🎨</button>
+        </div>
+        <p class="note">Connectez-vous pour retrouver votre budget — et votre thème — sur tous vos appareils.</p>
         <div class="tabs auth-tabs">
           <button type="button" data-mode="login" class="on">Connexion</button>
           <button type="button" data-mode="register">Créer un compte</button>
@@ -76,6 +91,7 @@
       </div>
 
       <div class="top-actions">
+        <button class="ghost" type="button" data-theme-open title="Apparence" aria-label="Changer l'apparence">🎨</button>
         <a class="ghost" href="./aide.html" title="Aide" aria-label="Aide">?</a>
         <button id="install-btn" class="ghost" hidden>⤓ Installer</button>
         <span id="user-chip" class="user-chip"></span>
