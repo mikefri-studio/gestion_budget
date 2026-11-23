@@ -125,3 +125,60 @@ tfoot td{font-weight:600;border-bottom:0}
 .btn-refuse{background:transparent;color:var(--neg);border:1px solid var(--line)}
 .toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%) translateY(8px);z-index:80;background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:10px;font-size:14px;font-weight:500;opacity:0;transition:opacity .25s,transform .25s;max-width:90vw;text-align:center}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+/* ══════════ RESPONSIVE : téléphone / tablette / PC ══════════ */
+
+/* ── Téléphones (≤ 599 px) : compact ── */
+@media (max-width:599.98px){
+  main{padding:16px 12px 40px}
+  .topbar{padding:10px 12px 0}
+  h1{font-size:20px}
+  .tabs button{font-size:13px;padding:9px 4px;line-height:1.25}
+  .account-btn{max-width:160px}
+  .banner{width:calc(100% - 24px)}
+  .sum{padding:14px}
+  section.box{padding:14px}
+  .real{width:78px}
+  .modal{padding:16px}
+}
+/* Petits téléphones (≤ 480 px) : formulaires empilés, grosses zones tactiles */
+@media (max-width:480px){
+  form input[name=name],form input[name=amount],form select{flex:1 1 100%}
+  form button{flex:1 1 100%;padding:11px}
+  .cards{gap:8px}
+  .card b{font-size:17px}
+}
+
+/* ── Tablettes (≥ 600 px) : colonne élargie ── */
+@media (min-width:600px){
+  main{max-width:720px;padding:24px 20px 56px}
+  .topbar{max-width:720px;padding:14px 20px 0}
+  .banner{max-width:688px}
+  .donut{width:160px;height:160px}
+  .cards{grid-template-columns:repeat(4,1fr)}
+  .auth-card{padding:26px}
+}
+
+/* ── PC et tablette paysage (≥ 900 px) : mise en page 2 colonnes ── */
+@media (min-width:900px){
+  main{max-width:960px;padding:28px 24px 64px}
+  .topbar{max-width:960px;padding:16px 24px 0}
+  .banner{max-width:928px}
+  h1{font-size:26px}
+  .sum{padding:20px}
+  .donut{width:180px;height:180px}
+  .donut .mid b{font-size:18px}
+  .legend{max-width:420px;font-size:15px}
+  .pie{gap:28px}
+  /* Onglet « Revenus et frais fixes » : les deux listes côte à côte */
+  #view.tab-fixes{display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:start}
+  #view.tab-fixes>section.box{margin-bottom:0}
+  /* Onglet « Bilan » : Période + cartes côte à côte, graphique et tableau en pleine largeur */
+  #view.tab-year{display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:start}
+  #view.tab-year>.month{grid-column:1/-1;margin-bottom:0!important}
+  #view.tab-year>section.box{margin-bottom:0}
+  #view.tab-year>section.box:nth-of-type(n+3){grid-column:1/-1}
+  .cards{grid-template-columns:1fr 1fr}
+  table{min-width:0}
+  .row{padding:10px 0}
+}
