@@ -1,13 +1,13 @@
 {
-  "name": "Solde — Suivi de budget",
-  "short_name": "Solde",
-  "description": "Suivi de dépenses et de budget, personnel et sécurisé.",
+  "name": "Mon budget mensuel",
+  "short_name": "Budget",
+  "description": "Revenus, frais fixes, dépenses prévues et bilan — personnel et sécurisé.",
   "lang": "fr",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
-  "background_color": "#0A1411",
-  "theme_color": "#0A1411",
+  "background_color": "#EEF3F4",
+  "theme_color": "#0B6E6E",
   "icons": [
     { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
     { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
