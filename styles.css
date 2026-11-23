@@ -182,3 +182,14 @@ tfoot td{font-weight:600;border-bottom:0}
   table{min-width:0}
   .row{padding:10px 0}
 }
+/* ══════════ v4 : accès accordés, vérification, annulation ══════════ */
+.menu-title{font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);margin:8px 10px 4px;font-weight:600}
+.account-option.static{cursor:default}
+.account-option.static:hover{background:transparent}
+.banner.warn{border-color:var(--accent);color:var(--ink);display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.banner.warn span{flex:1 1 220px}
+button.sm{padding:5px 10px;font-size:13px}
+.link-btn{background:none;color:var(--accent);font-weight:600;padding:8px 0;font-size:14px;text-decoration:underline;width:100%;text-align:center}
+.error.ok{color:var(--pos)}
+.toast{display:flex;align-items:center;justify-content:center;gap:10px}
+.toast-btn{background:transparent;color:var(--bg);border:1px solid currentColor;border-radius:6px;padding:3px 10px;font-size:13px;font-weight:600}
