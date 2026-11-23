@@ -19,7 +19,7 @@
 </head>
 <body>
 
-  <!-- ══════════ VUE CONNEXION (conservée du repo) ══════════ -->
+  <!-- ══════════ CONNEXION ══════════ -->
   <div id="view-auth">
     <main class="auth-wrap">
       <div class="auth-card">
@@ -39,15 +39,16 @@
           <p id="auth-error" class="error" hidden></p>
           <button type="submit" id="auth-submit">Se connecter</button>
         </form>
+        <button type="button" id="forgot-btn" class="link-btn">Mot de passe oublié ?</button>
         <p id="demo-hint" class="note" hidden>⚡ <b>Mode démo</b> : Firebase n'est pas configuré — vos données restent sur cet appareil. Renseignez <code>firebase-config.js</code> pour activer la synchronisation.</p>
+        <p class="note help-link"><a href="./aide.html">❓ Besoin d'aide ? Consultez le guide</a></p>
       </div>
     </main>
   </div>
 
-  <!-- ══════════ VUE APPLICATION (interface du collègue) ══════════ -->
+  <!-- ══════════ APPLICATION ══════════ -->
   <div id="view-app" hidden>
     <header class="topbar">
-      <!-- Sélecteur de compte (comptes liés, conservé du repo) -->
       <div class="account-switcher">
         <button id="account-btn" class="account-btn ghost" type="button">
           <span id="current-account-label">Mon compte</span>
@@ -59,6 +60,13 @@
             <span class="mail">Mon compte</span>
           </button>
           <div id="linked-accounts-list"></div>
+
+          <div id="shared-with-block">
+            <div class="menu-separator"></div>
+            <p class="menu-title">Personnes ayant accès</p>
+            <div id="shared-with-list"></div>
+          </div>
+
           <div class="menu-separator"></div>
           <button class="account-option invite-option" id="invite-btn" type="button">
             <span class="account-icon">➕</span>
@@ -68,6 +76,7 @@
       </div>
 
       <div class="top-actions">
+        <a class="ghost" href="./aide.html" title="Aide" aria-label="Aide">?</a>
         <button id="install-btn" class="ghost" hidden>⤓ Installer</button>
         <span id="user-chip" class="user-chip"></span>
         <button id="logout-btn" class="ghost">Sortir</button>
@@ -76,7 +85,12 @@
 
     <div id="demo-banner" class="banner" hidden>Mode démo : données stockées localement — configurez Firebase pour la synchronisation.</div>
 
-    <!-- Bandeau compte lié (conservé du repo) -->
+    <div id="verify-banner" class="banner warn" hidden>
+      <span>📧 Vérifiez <b id="verify-email"></b> pour pouvoir partager votre budget.</span>
+      <button id="verify-resend" class="ghost sm" type="button">Renvoyer le lien</button>
+      <button id="verify-done" class="ghost sm" type="button">J'ai vérifié</button>
+    </div>
+
     <div id="readonly-banner" class="banner link" hidden>
       <span id="readonly-icon">🔒</span>
       <span id="readonly-text"></span>
@@ -103,7 +117,7 @@
     </main>
   </div>
 
-  <!-- Modal invitation (conservé du repo) -->
+  <!-- Modal invitation -->
   <div class="modal-back" id="modal-invite" hidden>
     <div class="modal">
       <h2>Inviter quelqu'un</h2>
@@ -125,7 +139,7 @@
     </div>
   </div>
 
-  <!-- Modal invitations reçues (conservé du repo) -->
+  <!-- Modal invitations reçues -->
   <div class="modal-back" id="modal-pending" hidden>
     <div class="modal">
       <h2>Invitations reçues</h2>
