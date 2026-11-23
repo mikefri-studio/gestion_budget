@@ -37,11 +37,20 @@
     .help-nav a:hover{background:var(--soft)}
     .cats{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}
     .cats span{background:var(--bg);border:1px solid var(--line);border-radius:var(--rp);padding:4px 10px;font-size:13px}
-    .tip{background:var(--soft);border-radius:var(--r3);padding:10px 12px;font-size:14px;margin:10px 0 0}
+    .catgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:8px;margin:10px 0 0}
+    .catcard{display:flex;gap:9px;align-items:flex-start;background:var(--bg);border:1px solid var(--line);border-radius:var(--r3);padding:9px 11px}
+    .catcard .sw{width:12px;height:12px;border-radius:4px;margin-top:4px;flex:0 0 auto}
+    .catcard b{display:block;font-size:14px}
+    .catcard small{color:var(--muted);font-size:12.5px;line-height:1.35;display:block}
     .badge{display:inline-block;border:1px solid var(--line);border-radius:6px;padding:1px 7px;font-size:13px;background:var(--bg);white-space:nowrap}
     .pal{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0 0}
     .pal span{display:flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:var(--rp);padding:4px 10px;font-size:13px;background:var(--bg)}
     .pal i{width:12px;height:12px;border-radius:3px;display:inline-block}
+    .demo{display:grid;gap:6px;margin:12px 0 0}
+    .demo-row{display:flex;align-items:center;gap:10px;background:var(--bg);border:1px solid var(--line);border-radius:var(--r3);padding:9px 12px;font-size:14px}
+    .demo-row span{flex:1;color:var(--muted)}
+    .demo-row b{font-family:"Bricolage Grotesque",sans-serif}
+    .demo-row.now{border-color:var(--accent)}
     details{border-bottom:1px solid var(--line);padding:10px 0}
     details:last-of-type{border-bottom:0}
     summary{cursor:pointer;font-weight:600;font-size:15px;list-style:none;display:flex;gap:8px;align-items:baseline}
@@ -64,10 +73,11 @@
   <nav class="help-nav" aria-label="Sommaire">
     <a href="#demarrage">🚀 Démarrage</a>
     <a href="#onglets">🗂️ Les onglets</a>
-    <a href="#resume">🍩 Le résumé</a>
+    <a href="#exceptionnel">✨ Rentrées exceptionnelles</a>
+    <a href="#evolution">📈 Faire évoluer un montant</a>
+    <a href="#categories">🏷️ Catégories</a>
     <a href="#apparence">🎨 Apparence</a>
     <a href="#partage">👥 Partage</a>
-    <a href="#pwa">📱 Installation</a>
     <a href="#faq">🛠️ FAQ</a>
   </nav>
 
@@ -75,44 +85,80 @@
     <h2>🚀 Démarrage</h2>
     <ol>
       <li><b>Créez votre compte</b> (e-mail + mot de passe, 6 caractères minimum) ou connectez-vous.</li>
-      <li>Dans <b>Revenus et frais fixes</b>, saisissez ce qui rentre et ce qui sort chaque mois.</li>
-      <li>Dans <b>Dépenses prévues</b>, ajoutez vos dépenses du mois avec un montant prévu.</li>
-      <li>Au fil du mois, renseignez le <b>montant réel</b> de chaque dépense.</li>
+      <li>Dans <b>Revenus &amp; frais</b>, saisissez ce qui rentre et ce qui sort chaque mois, avec une catégorie pour chaque frais.</li>
+      <li>Une prime, un remboursement, une vente ? Ajoutez-les dans <b>Exceptionnel</b>, sur le mois où l'argent arrive.</li>
+      <li>Dans <b>Prévu</b>, ajoutez vos dépenses du mois, puis renseignez le <b>montant réel</b> au fil du mois.</li>
     </ol>
-    <p>Vos données sont <b>enregistrées automatiquement</b> et vous les retrouvez sur tous vos appareils en vous connectant avec le même compte. Une suppression peut être <b>annulée</b> pendant 5 secondes via le message en bas de l'écran.</p>
-    <p class="tip">⚡ Si un bandeau « Mode démo » s'affiche, Firebase n'est pas configuré : les données restent uniquement sur cet appareil. Renseignez <code>firebase-config.js</code> pour activer la synchronisation.</p>
+    <p>Tout est <b>enregistré automatiquement</b> et vous le retrouvez sur tous vos appareils. Le nom du mois en haut est un bouton : cliquez-le pour <b>revenir au mois en cours</b>. Une suppression peut être <b>annulée</b> pendant 5 secondes.</p>
+    <p class="tip">⚡ Si un bandeau « Mode démo » s'affiche, Firebase n'est pas configuré : les données restent uniquement sur cet appareil.</p>
   </section>
 
   <section class="box" id="onglets">
-    <h2>🗂️ Les trois onglets</h2>
-    <p><b>1. Revenus et frais fixes</b> — les montants qui reviennent <b>chaque mois</b> : salaire, aides… d'un côté ; loyer, assurances, abonnements… de l'autre. Ils servent de base à tous les mois et au bilan. Pour corriger une ligne, supprimez-la (×) puis rajoutez-la.</p>
-    <p><b>2. Dépenses prévues</b> — propres au <b>mois affiché</b> (changez de mois avec ‹ ›). Pour chaque dépense : un libellé, une catégorie et un montant prévu. Quand la dépense a lieu, saisissez le montant dans le champ <b>Réel</b> :</p>
-    <ul>
-      <li><b class="eco">vert</b> : vous avez dépensé moins que prévu (économie) ;</li>
-      <li><b class="neg">rouge</b> : vous avez dépassé le montant prévu ;</li>
-      <li>videz le champ Réel pour effacer le montant réel.</li>
-    </ul>
-    <div class="cats">
-      <span>🥐 Alimentation</span><span>🏠 Logement</span><span>🚇 Transport</span><span>🎬 Loisirs</span>
-      <span>💊 Santé</span><span>🛍️ Shopping</span><span>📺 Abonnements</span><span>🧾 Autre</span>
-    </div>
-    <p class="tip">💡 Le bouton <b>Reprendre le mois précédent</b> recopie toutes les lignes prévues du mois d'avant (sans les montants réels) : pratique pour les dépenses récurrentes.</p>
-    <p style="margin-top:10px"><b>3. Bilan</b> — la vue d'ensemble sur l'année : choisissez une période (Année, T1…T4, S1, S2 ou « Du… au… »). Les cartes totalisent revenus, frais, dépenses prévues et reste prévisionnel. Dans le graphique, chaque mois a deux barres : <b>gauche = prévu</b>, <b>droite = réel</b> (seules les dépenses avec un réel saisi comptent). La ligne pointillée représente vos revenus. Le tableau détaille mois par mois.</p>
+    <h2>🗂️ Les quatre onglets</h2>
+    <p><b>Revenus &amp; frais</b> — les montants récurrents, mois après mois. Chaque frais fixe porte une catégorie. Au-dessus des listes : <b>recherche</b>, <b>tri</b> (montant, nom, catégorie, ajout récent), <b>🗂️ Groupé / 📋 Liste</b>, <b>pastilles de catégorie</b> pour filtrer, et une <b>barre de répartition</b>. Le bouton <b>✎</b> édite la ligne, <b>×</b> l'arrête, et un clic sur le nom ouvre le <b>détail avec l'historique</b>.</p>
+    <p><b>Exceptionnel</b> — les rentrées ponctuelles du mois : un libellé, une catégorie, un montant. Pas de prévu, pas de réel.</p>
+    <p><b>Prévu</b> — les dépenses du mois affiché, avec un montant prévu et un champ <b>Réel</b> : <b class="eco">vert</b> si vous dépensez moins, <b class="neg">rouge</b> si vous dépassez. <b>Reprendre le mois précédent</b> recopie les lignes prévues.</p>
+    <p><b>Bilan</b> — la vue d'ensemble : période (Année, T1…T4, S1, S2 ou « Du… au… »), cartes de totaux, répartition des frais fixes et des rentrées exceptionnelles, graphique mois par mois et tableau détaillé avec les revenus et les frais de chaque mois.</p>
+    <p class="tip">💡 Vos choix de tri, de groupe et de filtre sont mémorisés sur votre profil.</p>
   </section>
 
-  <section class="box" id="resume">
-    <h2>🍩 Comprendre le résumé</h2>
-    <p><b>Reste à vivre = Revenus − Frais fixes − Dépenses prévues</b> (du mois affiché). S'il est négatif, il s'affiche en rouge sous le nom « Déficit ».</p>
+  <section class="box" id="exceptionnel">
+    <h2>✨ Rentrées exceptionnelles</h2>
+    <p>Une prime de fin d'année, un 13<sup>e</sup> mois, un remboursement, une vente, un cadeau, un remboursement d'impôts… tout ce qui rentre <b>une seule fois</b> se saisit ici, sur le mois où l'argent arrive.</p>
     <ul>
-      <li><b>Donut</b> : part sombre = frais fixes, part colorée = dépenses prévues, part claire = reste.</li>
-      <li><b>Anneau extérieur</b> : l'écart réel / prévu — <b class="eco">vert</b> si vous êtes sous le budget, <b class="neg">rouge</b> si vous le dépassez.</li>
-      <li><b>Écart réel / prévu</b> : ne compte que les dépenses dont le montant réel a été saisi.</li>
+      <li><b>Un libellé, une catégorie, un montant</b> — c'est tout. Aucune prévision, aucun montant réel à remplir.</li>
+      <li>La rentrée s'ajoute aux <b>revenus du mois</b> : le reste à vivre du donut augmente d'autant, et une ligne dorée « dont exceptionnel » apparaît dans la légende.</li>
+      <li>Elle <b>ne se répète pas</b> les autres mois.</li>
+      <li>Le bloc <b>Sur l'année</b> liste les mois qui ont reçu une rentrée ; cliquez un mois pour y aller directement.</li>
+      <li>Dans le <b>Bilan</b>, un point doré sur le graphique signale ces mois, et une répartition par nature chiffre le total de la période.</li>
     </ul>
+    <div class="cats">
+      <span>💼 Prime &amp; bonus</span><span>🎁 Rappel de salaire</span><span>↩️ Remboursement</span><span>🏷️ Vente</span>
+      <span>🎀 Cadeau &amp; don</span><span>🧾 Impôts &amp; aides</span><span>📈 Intérêts &amp; gains</span><span>📌 Autre</span>
+    </div>
+  </section>
+
+  <section class="box" id="evolution">
+    <h2>📈 Faire évoluer un revenu ou un frais fixe</h2>
+    <p>Une augmentation, un loyer qui change, un abonnement résilié : modifiez le montant <b>le mois où le changement commence</b>. Il s'applique à ce mois et à <b>tous les suivants</b>, jamais aux mois précédents.</p>
+    <div class="demo">
+      <div class="demo-row"><span>Janvier → février</span><b>1 850 €</b></div>
+      <div class="demo-row now"><span>Mars (vous modifiez) → décembre</span><b>2 050 €</b></div>
+    </div>
+    <ul style="margin-top:12px">
+      <li><b>✎</b> sur la ligne, changez le montant, puis ✓. Un message confirme « Montant modifié à partir de mars », avec <b>Annuler</b> possible.</li>
+      <li>Le <b>libellé</b> et la <b>catégorie</b>, eux, sont corrigés <b>partout</b> : ce ne sont pas des montants.</li>
+      <li><b>×</b> arrête la ligne à partir du mois affiché : elle disparaît des mois suivants et reste dans les mois précédents.</li>
+      <li>Cliquez le <b>nom de la ligne</b> pour ouvrir le tiroir : montant du mois, <b>historique complet</b> des périodes, et les actions « Modifier à partir de ce mois », « Arrêter à partir de ce mois », « Supprimer partout ».</li>
+      <li>Une ligne créée en mars n'existe pas en janvier : les badges <span class="badge">à partir de ce mois</span> et <span class="badge">🕘 historique</span> le signalent.</li>
+      <li>Le <b>Bilan</b> utilise les montants réellement en vigueur chaque mois : il reste juste même après une augmentation en cours d'année.</li>
+    </ul>
+    <p class="tip">💡 Vos lignes existantes continuent de s'appliquer à tous les mois, comme avant. Rien n'est modifié tant que vous ne changez pas un montant.</p>
+  </section>
+
+  <section class="box" id="categories">
+    <h2>🏷️ Les catégories de frais fixes</h2>
+    <p>Douze catégories couvrent les sorties récurrentes d'un mois. Choisissez-la à l'ajout, ou changez-la ensuite avec <b>✎</b>.</p>
+    <div class="catgrid">
+      <div class="catcard"><span class="sw" style="background:#7FB4E6"></span><span><b>🏠 Logement</b><small>Loyer, crédit immobilier, charges</small></span></div>
+      <div class="catcard"><span class="sw" style="background:#E8B44A"></span><span><b>⚡ Énergie &amp; eau</b><small>Électricité, gaz, eau, chauffage</small></span></div>
+      <div class="catcard"><span class="sw" style="background:#5B8DEF"></span><span><b>📱 Internet &amp; mobile</b><small>Box, fibre, forfaits</small></span></div>
+      <div class="catcard"><span class="sw" style="background:#6FD6C7"></span><span><b>📺 Abonnements</b><small>Streaming, applications, presse</small></span></div>
+      <div class="catcard"><span class="sw" style="background:#A78BFA"></span><span><b>🛡️ Assurances</b><small>Auto, habitation, prévoyance</small></span></div>
+      <div class="catcard"><span class="sw" style="background:#D4A373"></span><span><b>🏦 Crédits</b><small>Prêts, mensualités</small></span></div>
+      <div class="catcard"><span class="sw" style="background:#8FBF9F"></span><span><b>🧾 Impôts &amp; taxes</b><small>Revenu, foncière, redevances</small></span></div>
+      <div class="catcard"><span class="sw" style="background:#F2705C"></span><span><b>💊 Santé &amp; mutuelle</b><small>Mutuelle, soins réguliers</small></span></div>
+      <div class="catcard"><span class="sw" style="background:#59D69F"></span><span><b>🚇 Transport</b><small>Pass, essence, péage, leasing</small></span></div>
+      <div class="catcard"><span class="sw" style="background:#C0CA6B"></span><span><b>🎓 Enfants &amp; études</b><small>Scolarité, cantine, garde</small></span></div>
+      <div class="catcard"><span class="sw" style="background:#E98AC2"></span><span><b>🐖 Épargne</b><small>Virement d'épargne, livrets</small></span></div>
+      <div class="catcard"><span class="sw" style="background:#9DB3A6"></span><span><b>📌 Autre</b><small>Tout le reste</small></span></div>
+    </div>
+    <p class="tip">✨ Les lignes créées avant l'arrivée des catégories sont classées automatiquement d'après leur libellé (« Netflix » → Abonnements, « MAIF » → Assurances…). Corrigez si besoin avec ✎.</p>
   </section>
 
   <section class="box" id="apparence">
     <h2>🎨 Apparence : un thème par profil</h2>
-    <p>Cliquez sur <b>🎨</b> en haut de l'écran pour ouvrir le panneau d'apparence. Chaque réglage s'applique <b>immédiatement</b> et s'enregistre <b>sur votre profil</b> : vous le retrouvez sur votre téléphone, votre tablette et votre ordinateur, et il ne change pas celui des personnes avec qui vous partagez.</p>
+    <p>Cliquez sur <b>🎨</b> pour ouvrir le panneau d'apparence. Chaque réglage s'applique immédiatement et s'enregistre sur votre profil, sans changer celui des personnes avec qui vous partagez.</p>
     <div class="pal">
       <span><i style="background:#C2603A"></i>Chaleureux</span>
       <span><i style="background:#C98A16"></i>Soleil</span>
@@ -122,76 +168,60 @@
       <span><i style="background:#3A5A8C"></i>Ardoise</span>
     </div>
     <ul style="margin-top:10px">
-      <li><b>Palette</b> : six ambiances, du plus chaud (terre cuite, ambre) au plus frais (turquoise, bleu nuit).</li>
-      <li><b>Luminosité</b> : Clair, Sombre, ou Auto (suit le réglage de votre appareil).</li>
-      <li><b>Couleur d'accent</b> : choisissez votre teinte au curseur, ou revenez à celle de la palette avec « Auto ».</li>
-      <li><b>Arrondi</b> : des angles francs (0 px) à très doux (22 px).</li>
-      <li><b>Lecture</b> : densité Compact / Normal / Aéré, taille de texte A− / A / A+, et contraste renforcé.</li>
-      <li><b>Réinitialiser</b> revient au thème Chaleureux d'origine.</li>
+      <li><b>Palette</b>, <b>luminosité</b> (clair, sombre, auto), <b>couleur d'accent</b> au curseur.</li>
+      <li><b>Arrondi</b> des angles, <b>densité</b>, <b>taille de texte</b>, <b>contraste renforcé</b>.</li>
     </ul>
-    <p class="tip">💡 Le panneau reste ouvert pendant que vous regardez l'application : sur ordinateur il se place sur le côté, sur téléphone il monte du bas. Fermez-le avec ✕, la touche Échap ou en cliquant ailleurs.</p>
+    <p class="tip">💡 Les couleurs des catégories restent identiques dans tous les thèmes, pour garder vos repères.</p>
   </section>
 
   <section class="box" id="partage">
     <h2>👥 Partager votre budget</h2>
     <ol>
-      <li>Ouvrez le <b>menu compte</b> (en haut à gauche) → <b>➕ Inviter quelqu'un</b>.</li>
-      <li>Saisissez son e-mail et choisissez la permission : <span class="badge">👁️ Lecture seule</span> ou <span class="badge">✏️ Lecture et écriture</span>.</li>
-      <li>La personne doit <b>s'être connectée au moins une fois</b> à l'app avec cet e-mail, sinon vous verrez « Compte introuvable ».</li>
-      <li>À sa prochaine connexion (ou en ouvrant le menu compte), elle voit l'invitation et choisit <b>Accepter</b> ou <b>Refuser</b>.</li>
+      <li>Menu compte (en haut à gauche) → <b>➕ Inviter quelqu'un</b>.</li>
+      <li>E-mail + permission : <span class="badge">👁️ Lecture seule</span> ou <span class="badge">✏️ Lecture et écriture</span>.</li>
+      <li>La personne doit s'être connectée au moins une fois avec cet e-mail.</li>
+      <li>Elle accepte ou refuse à sa prochaine connexion.</li>
     </ol>
-    <p>Une fois le lien accepté, la personne bascule vers votre budget depuis son menu compte. Un bandeau lui rappelle le mode : <b>🔒 lecture seule</b> ou <b>✏️ écriture</b>. Les modifications des deux côtés apparaissent <b>en direct</b>, sans recharger.</p>
-    <ul>
-      <li><b>Voir et révoquer les accès</b> : menu compte → « Personnes ayant accès » → ✕. Les invitations non acceptées y sont aussi annulables.</li>
-      <li><b>Revenir à son propre budget</b> : menu compte → 👤 Mon compte.</li>
-      <li><b>Rompre le lien</b> : la personne invitée clique sur ✕ à côté du compte dans son menu.</li>
-    </ul>
-    <p class="tip">💡 Pour changer une permission : révoquez l'accès, puis réinvitez la personne avec l'autre permission. Chacun garde son propre thème.</p>
-  </section>
-
-  <section class="box" id="pwa">
-    <h2>📱 Installer l'app &amp; hors connexion</h2>
-    <ul>
-      <li><b>Android / Chrome / Edge</b> : bouton <b>⤓ Installer</b> en haut de l'app, ou menu ⋮ → « Installer l'application ».</li>
-      <li><b>iPhone / iPad (Safari)</b> : bouton Partager → « Sur l'écran d'accueil ».</li>
-      <li><b>PC</b> : icône d'installation à droite de la barre d'adresse.</li>
-    </ul>
-    <p>Une fois installée, l'app s'ouvre en plein écran comme une vraie application et reste <b>consultable hors connexion</b>. L'enregistrement des modifications, lui, nécessite une connexion internet.</p>
+    <p>Les modifications apparaissent <b>en direct</b> des deux côtés. Menu compte → « Personnes ayant accès » pour <b>révoquer</b> un accès ou annuler une invitation.</p>
   </section>
 
   <section class="box" id="faq">
     <h2>🛠️ Questions fréquentes</h2>
     <details>
-      <summary>Mon thème ne se retrouve pas sur un autre appareil ?</summary>
-      <p>Connectez-vous avec le même compte : l'apparence est liée au profil, pas à l'appareil. Hors connexion, le dernier thème utilisé s'applique quand même immédiatement.</p>
+      <summary>Comment ajouter une prime ou une rentrée ponctuelle ?</summary>
+      <p>Onglet <b>Exceptionnel</b>, sur le mois où l'argent arrive : libellé, catégorie, montant. Elle s'ajoute aux revenus de ce mois uniquement.</p>
     </details>
     <details>
-      <summary>« Compte introuvable » quand j'envoie une invitation ?</summary>
-      <p>La personne doit d'abord créer son compte et se connecter au moins une fois à l'app avec l'e-mail que vous avez saisi. Ensuite, réessayez.</p>
+      <summary>J'ai augmenté mon salaire en mars : janvier est-il modifié ?</summary>
+      <p>Non. Allez sur mars, cliquez ✎ sur la ligne de salaire, saisissez le nouveau montant. Mars et les mois suivants l'utilisent ; janvier et février gardent l'ancien.</p>
     </details>
     <details>
-      <summary>Je ne vois pas l'invitation que j'ai reçue ?</summary>
-      <p>Elle s'affiche à la connexion. Ouvrez le menu compte (en haut à gauche) pour revérifier, ou déconnectez-vous puis reconnectez-vous.</p>
+      <summary>J'ai résilié un abonnement : comment le retirer sans fausser le passé ?</summary>
+      <p>Placez-vous sur le premier mois sans l'abonnement et cliquez ×. La ligne s'arrête à partir de ce mois ; les mois précédents la conservent.</p>
     </details>
     <details>
-      <summary>Pourquoi je ne peux rien modifier (« Lecture seule ») ?</summary>
-      <p>Vous consultez le budget de quelqu'un avec la permission 👁️. Demandez-lui de vous réinviter avec la permission ✏️ après avoir révoqué l'accès.</p>
+      <summary>Comment voir tous les montants successifs d'une ligne ?</summary>
+      <p>Cliquez sur son nom : le tiroir affiche chaque période et son montant, et met en évidence celui du mois affiché.</p>
+    </details>
+    <details>
+      <summary>Une ligne a été classée dans la mauvaise catégorie ?</summary>
+      <p>✎ puis la bonne catégorie : la correction s'applique à toutes les périodes de la ligne.</p>
+    </details>
+    <details>
+      <summary>Pourquoi je ne vois plus certaines lignes ?</summary>
+      <p>Une pastille de catégorie ou une recherche est active. Cliquez « Tous » et videz la recherche.</p>
     </details>
     <details>
       <summary>J'ai supprimé une ligne par erreur ?</summary>
-      <p>Cliquez sur <b>Annuler</b> dans le message qui apparaît en bas de l'écran : vous avez 5 secondes pour la restaurer à l'identique.</p>
+      <p>Cliquez <b>Annuler</b> dans le message en bas de l'écran : 5 secondes pour tout restaurer, historique compris.</p>
     </details>
     <details>
-      <summary>Mes modifications ne s'enregistrent pas ?</summary>
-      <p>Vérifiez votre connexion internet : un message « Enregistrement impossible » apparaît si la sauvegarde échoue. Assurez-vous aussi de ne pas être en mode démo (bandeau en haut).</p>
-    </details>
-    <details>
-      <summary>Le bilan multiplie-t-il mes revenus chaque mois ?</summary>
-      <p>Oui : revenus et frais fixes sont considérés comme identiques chaque mois, multipliés par le nombre de mois de la période. Seules les dépenses prévues varient d'un mois à l'autre.</p>
+      <summary>Pourquoi je ne peux rien modifier (« Lecture seule ») ?</summary>
+      <p>Vous consultez le budget de quelqu'un avec la permission 👁️. Demandez une réinvitation en ✏️.</p>
     </details>
     <details>
       <summary>Où sont stockées mes données ?</summary>
-      <p>Dans votre projet Firebase, rattachées à votre compte. Elles ne sont accessibles qu'à vous et aux personnes liées ayant accepté votre invitation, selon la permission accordée. La connexion est gérée par Firebase Authentication.</p>
+      <p>Dans votre projet Firebase, rattachées à votre compte, accessibles uniquement à vous et aux personnes liées ayant accepté, selon la permission accordée.</p>
     </details>
   </section>
 
