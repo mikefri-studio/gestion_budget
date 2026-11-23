@@ -373,7 +373,9 @@ function render() {
   $('#t-fixes').setAttribute('aria-selected', tab === 'fixes');
   $('#t-plans').setAttribute('aria-selected', tab === 'plans');
   $('#t-year').setAttribute('aria-selected', tab === 'year');
-  $('#view').innerHTML = tab === 'fixes'
+  const v = $('#view');
+  v.className = 'tab-' + tab; // mise en page responsive par onglet
+  v.innerHTML = tab === 'fixes'
     ? listBlock('Revenus', 'income', 'Ex. Salaire', 'Ce qui rentre chaque mois.') + listBlock('Frais', 'fixed', 'Ex. Loyer', 'Ce qui sort chaque mois : loyer, abonnements, assurances…')
     : tab === 'plans' ? renderPlans() : renderYear();
 }
