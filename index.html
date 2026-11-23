@@ -3,8 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>Mon budget mensuel</title>
-  <meta name="description" content="Revenus, frais fixes, dépenses prévues et bilan — synchronisés et partageables.">
+  <title>Aide — Mon budget mensuel</title>
   <script>
   (function(){try{
     var p=JSON.parse(localStorage.getItem('budget.prefs.last')||'{}');
@@ -21,153 +20,230 @@
   </script>
   <link rel="manifest" href="./manifest.webmanifest">
   <link rel="icon" href="./icon.svg" type="image/svg+xml">
-  <link rel="apple-touch-icon" href="./icon.svg">
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@500;700&family=Figtree:wght@400;500;600&display=swap">
   <link rel="stylesheet" href="./styles.css">
+  <style>
+    html{scroll-behavior:smooth}
+    main{max-width:780px}
+    section.box{scroll-margin-top:12px}
+    section.box p,section.box li{font-size:calc(15px*var(--ts));line-height:1.55}
+    section.box ol,section.box ul{margin:8px 0;padding-left:22px;display:grid;gap:6px}
+    .help-top{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:14px}
+    .btn-back{display:inline-block;background:var(--accent);color:var(--accent-ink);text-decoration:none;font-weight:600;border-radius:var(--r2);padding:8px 14px}
+    .help-nav{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 16px}
+    .help-nav a{background:var(--surface);border:1px solid var(--line);color:var(--ink);text-decoration:none;font-size:14px;font-weight:500;border-radius:var(--rp);padding:6px 12px}
+    .help-nav a:hover{background:var(--soft)}
+    .cats{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}
+    .cats span{background:var(--bg);border:1px solid var(--line);border-radius:var(--rp);padding:4px 10px;font-size:13px}
+    .catgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:8px;margin:10px 0 0}
+    .catcard{display:flex;gap:9px;align-items:flex-start;background:var(--bg);border:1px solid var(--line);border-radius:var(--r3);padding:9px 11px}
+    .catcard .sw{width:12px;height:12px;border-radius:4px;margin-top:4px;flex:0 0 auto}
+    .catcard b{display:block;font-size:14px}
+    .catcard small{color:var(--muted);font-size:12.5px;line-height:1.35;display:block}
+    .tip{background:var(--soft);border-radius:var(--r3);padding:10px 12px;font-size:14px;margin:10px 0 0}
+    .badge{display:inline-block;border:1px solid var(--line);border-radius:6px;padding:1px 7px;font-size:13px;background:var(--bg);white-space:nowrap}
+    .pal{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0 0}
+    .pal span{display:flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:var(--rp);padding:4px 10px;font-size:13px;background:var(--bg)}
+    .pal i{width:12px;height:12px;border-radius:3px;display:inline-block}
+    details{border-bottom:1px solid var(--line);padding:10px 0}
+    details:last-of-type{border-bottom:0}
+    summary{cursor:pointer;font-weight:600;font-size:15px;list-style:none;display:flex;gap:8px;align-items:baseline}
+    summary::-webkit-details-marker{display:none}
+    summary::before{content:"▸";color:var(--muted);transition:transform .15s}
+    details[open] summary::before{transform:rotate(90deg)}
+    details p{margin:8px 0 2px;color:var(--muted)}
+    .foot-back{text-align:center;margin-top:18px}
+  </style>
 </head>
 <body>
-
-  <!-- ══════════ CONNEXION ══════════ -->
-  <div id="view-auth">
-    <main class="auth-wrap">
-      <div class="auth-card">
-        <div class="auth-top">
-          <h1>Mon budget mensuel</h1>
-          <button class="ghost" type="button" data-theme-open title="Apparence" aria-label="Changer l'apparence">🎨</button>
-        </div>
-        <p class="note">Connectez-vous pour retrouver votre budget — et votre thème — sur tous vos appareils.</p>
-        <div class="tabs auth-tabs">
-          <button type="button" data-mode="login" class="on">Connexion</button>
-          <button type="button" data-mode="register">Créer un compte</button>
-        </div>
-        <form id="auth-form" novalidate>
-          <label class="lbl">E-mail
-            <input type="email" id="auth-email" required autocomplete="email" placeholder="vous@exemple.fr">
-          </label>
-          <label class="lbl">Mot de passe
-            <input type="password" id="auth-pass" required minlength="6" autocomplete="current-password" placeholder="6 caractères minimum">
-          </label>
-          <p id="auth-error" class="error" hidden></p>
-          <button type="submit" id="auth-submit">Se connecter</button>
-        </form>
-        <button type="button" id="forgot-btn" class="link-btn">Mot de passe oublié ?</button>
-        <p id="demo-hint" class="note" hidden>⚡ <b>Mode démo</b> : Firebase n'est pas configuré — vos données restent sur cet appareil. Renseignez <code>firebase-config.js</code> pour activer la synchronisation.</p>
-        <p class="note help-link"><a href="./aide.html">❓ Besoin d'aide ? Consultez le guide</a></p>
-      </div>
-    </main>
+<main>
+  <div class="help-top">
+    <a class="btn-back" href="./index.html">← Retour à l'application</a>
+    <button class="ghost" type="button" data-theme-open title="Apparence" aria-label="Changer l'apparence">🎨 Apparence</button>
   </div>
+  <h1>Aide</h1>
+  <p class="note">Tout ce qu'il faut savoir pour utiliser Mon budget mensuel, en 5 minutes.</p>
 
-  <!-- ══════════ APPLICATION ══════════ -->
-  <div id="view-app" hidden>
-    <header class="topbar">
-      <div class="account-switcher">
-        <button id="account-btn" class="account-btn ghost" type="button">
-          <span id="current-account-label">Mon compte</span>
-          <span class="chevron">▾</span>
-        </button>
-        <div id="account-menu" class="account-menu" hidden>
-          <button class="account-option active" data-view="self" type="button">
-            <span class="account-icon">👤</span>
-            <span class="mail">Mon compte</span>
-          </button>
-          <div id="linked-accounts-list"></div>
+  <nav class="help-nav" aria-label="Sommaire">
+    <a href="#demarrage">🚀 Démarrage</a>
+    <a href="#onglets">🗂️ Les onglets</a>
+    <a href="#categories">🏷️ Catégories</a>
+    <a href="#resume">🍩 Le résumé</a>
+    <a href="#apparence">🎨 Apparence</a>
+    <a href="#partage">👥 Partage</a>
+    <a href="#pwa">📱 Installation</a>
+    <a href="#faq">🛠️ FAQ</a>
+  </nav>
 
-          <div id="shared-with-block">
-            <div class="menu-separator"></div>
-            <p class="menu-title">Personnes ayant accès</p>
-            <div id="shared-with-list"></div>
-          </div>
+  <section class="box" id="demarrage">
+    <h2>🚀 Démarrage</h2>
+    <ol>
+      <li><b>Créez votre compte</b> (e-mail + mot de passe, 6 caractères minimum) ou connectez-vous.</li>
+      <li>Dans <b>Revenus et frais fixes</b>, saisissez ce qui rentre et ce qui sort chaque mois, avec une catégorie pour chaque frais.</li>
+      <li>Dans <b>Dépenses prévues</b>, ajoutez vos dépenses du mois avec un montant prévu.</li>
+      <li>Au fil du mois, renseignez le <b>montant réel</b> de chaque dépense.</li>
+    </ol>
+    <p>Vos données sont <b>enregistrées automatiquement</b> et vous les retrouvez sur tous vos appareils. Une suppression peut être <b>annulée</b> pendant 5 secondes via le message en bas de l'écran.</p>
+    <p class="tip">⚡ Si un bandeau « Mode démo » s'affiche, Firebase n'est pas configuré : les données restent uniquement sur cet appareil. Renseignez <code>firebase-config.js</code> pour activer la synchronisation.</p>
+  </section>
 
-          <div class="menu-separator"></div>
-          <button class="account-option invite-option" id="invite-btn" type="button">
-            <span class="account-icon">➕</span>
-            <span class="mail">Inviter quelqu'un</span>
-          </button>
-        </div>
-      </div>
-
-      <div class="top-actions">
-        <button class="ghost" type="button" data-theme-open title="Apparence" aria-label="Changer l'apparence">🎨</button>
-        <a class="ghost" href="./aide.html" title="Aide" aria-label="Aide">?</a>
-        <button id="install-btn" class="ghost" hidden>⤓ Installer</button>
-        <span id="user-chip" class="user-chip"></span>
-        <button id="logout-btn" class="ghost">Sortir</button>
-      </div>
-    </header>
-
-    <div id="demo-banner" class="banner" hidden>Mode démo : données stockées localement — configurez Firebase pour la synchronisation.</div>
-
-    <div id="verify-banner" class="banner warn" hidden>
-      <span>📧 Vérifiez <b id="verify-email"></b> pour pouvoir partager votre budget.</span>
-      <button id="verify-resend" class="ghost sm" type="button">Renvoyer le lien</button>
-      <button id="verify-done" class="ghost sm" type="button">J'ai vérifié</button>
+  <section class="box" id="onglets">
+    <h2>🗂️ Les trois onglets</h2>
+    <p><b>1. Revenus et frais fixes</b> — les montants qui reviennent <b>chaque mois</b>. Chaque frais fixe porte une catégorie (logement, énergie, abonnements, assurances, crédits…). Au-dessus de la liste :</p>
+    <ul>
+      <li><b>Rechercher</b> : filtre les lignes par nom, en direct.</li>
+      <li><b>Trier</b> : montant ↓ ou ↑, nom A→Z, catégorie, ajout récent.</li>
+      <li><b>🗂️ Groupé / 📋 Liste</b> : regroupe les frais par catégorie avec un sous-total par groupe, ou affiche une liste à plat.</li>
+      <li><b>Pastilles de catégorie</b> : cliquez pour ne voir qu'une catégorie ; « Tous » revient à la vue complète. Le total affiche alors la sélection et le total général.</li>
+      <li><b>Barre de répartition</b> : la part de chaque catégorie dans vos frais fixes mensuels.</li>
+      <li><b>✎</b> : modifiez le libellé, la catégorie et le montant directement dans la ligne. <b>Échap</b> ou « Annuler » abandonne, ✓ enregistre.</li>
+    </ul>
+    <p class="tip">💡 Vos choix de tri, de groupe et de filtre sont mémorisés sur votre profil : vous les retrouvez à la prochaine connexion.</p>
+    <p style="margin-top:10px"><b>2. Dépenses prévues</b> — propres au <b>mois affiché</b> (changez de mois avec ‹ ›). Pour chaque dépense : un libellé, une catégorie et un montant prévu. Quand la dépense a lieu, saisissez le montant dans le champ <b>Réel</b> :</p>
+    <ul>
+      <li><b class="eco">vert</b> : vous avez dépensé moins que prévu (économie) ;</li>
+      <li><b class="neg">rouge</b> : vous avez dépassé le montant prévu ;</li>
+      <li>videz le champ Réel pour effacer le montant réel.</li>
+    </ul>
+    <div class="cats">
+      <span>🥐 Alimentation</span><span>🏠 Logement</span><span>🚇 Transport</span><span>🎬 Loisirs</span>
+      <span>💊 Santé</span><span>🛍️ Shopping</span><span>📺 Abonnements</span><span>🧾 Autre</span>
     </div>
+    <p class="tip">💡 Le bouton <b>Reprendre le mois précédent</b> recopie toutes les lignes prévues du mois d'avant (sans les montants réels) : pratique pour les dépenses récurrentes.</p>
+    <p style="margin-top:10px"><b>3. Bilan</b> — la vue d'ensemble sur l'année : choisissez une période (Année, T1…T4, S1, S2 ou « Du… au… »). Les cartes totalisent revenus, frais, dépenses prévues et reste prévisionnel. La section <b>Répartition des frais fixes</b> détaille chaque catégorie en euros et en pourcentage sur la période. Dans le graphique, chaque mois a deux barres : <b>gauche = prévu</b>, <b>droite = réel</b>. La ligne pointillée représente vos revenus.</p>
+  </section>
 
-    <div id="readonly-banner" class="banner link" hidden>
-      <span id="readonly-icon">🔒</span>
-      <span id="readonly-text"></span>
-      <b id="readonly-email"></b>
+  <section class="box" id="categories">
+    <h2>🏷️ Les catégories de frais fixes</h2>
+    <p>Douze catégories couvrent les sorties récurrentes d'un mois. Choisissez-la à l'ajout, ou changez-la ensuite avec <b>✎</b>.</p>
+    <div class="catgrid">
+      <div class="catcard"><span class="sw" style="background:#7FB4E6"></span><span><b>🏠 Logement</b><small>Loyer, crédit immobilier, charges de copropriété</small></span></div>
+      <div class="catcard"><span class="sw" style="background:#E8B44A"></span><span><b>⚡ Énergie &amp; eau</b><small>Électricité, gaz, eau, chauffage</small></span></div>
+      <div class="catcard"><span class="sw" style="background:#5B8DEF"></span><span><b>📱 Internet &amp; mobile</b><small>Box, fibre, forfaits téléphone</small></span></div>
+      <div class="catcard"><span class="sw" style="background:#6FD6C7"></span><span><b>📺 Abonnements</b><small>Streaming, applications, presse, licences</small></span></div>
+      <div class="catcard"><span class="sw" style="background:#A78BFA"></span><span><b>🛡️ Assurances</b><small>Auto, habitation, prévoyance, responsabilité civile</small></span></div>
+      <div class="catcard"><span class="sw" style="background:#D4A373"></span><span><b>🏦 Crédits</b><small>Prêts, mensualités, crédit renouvelable</small></span></div>
+      <div class="catcard"><span class="sw" style="background:#8FBF9F"></span><span><b>🧾 Impôts &amp; taxes</b><small>Impôt sur le revenu, taxe foncière, redevances</small></span></div>
+      <div class="catcard"><span class="sw" style="background:#F2705C"></span><span><b>💊 Santé &amp; mutuelle</b><small>Mutuelle, soins réguliers</small></span></div>
+      <div class="catcard"><span class="sw" style="background:#59D69F"></span><span><b>🚇 Transport</b><small>Pass, essence, péage, leasing</small></span></div>
+      <div class="catcard"><span class="sw" style="background:#C0CA6B"></span><span><b>🎓 Enfants &amp; études</b><small>Scolarité, cantine, garde, cours</small></span></div>
+      <div class="catcard"><span class="sw" style="background:#E98AC2"></span><span><b>🐖 Épargne</b><small>Virement d'épargne, assurance vie, livrets</small></span></div>
+      <div class="catcard"><span class="sw" style="background:#9DB3A6"></span><span><b>📌 Autre</b><small>Tout le reste</small></span></div>
     </div>
+    <p class="tip">✨ Les lignes de frais fixes créées avant l'arrivée des catégories sont <b>catégorisées automatiquement</b> d'après leur libellé (« Netflix » → Abonnements, « MAIF » → Assurances, « EDF » → Énergie…). Un message vous indique combien de lignes ont été classées ; corrigez celles qui ne tombent pas juste avec ✎.</p>
+  </section>
 
-    <main>
-      <h1>Mon budget mensuel</h1>
-      <div class="month">
-        <button class="ghost" id="prev" aria-label="Mois précédent">‹</button>
-        <b id="mlabel"></b>
-        <button class="ghost" id="next" aria-label="Mois suivant">›</button>
-      </div>
+  <section class="box" id="resume">
+    <h2>🍩 Comprendre le résumé</h2>
+    <p><b>Reste à vivre = Revenus − Frais fixes − Dépenses prévues</b> (du mois affiché). S'il est négatif, il s'affiche en rouge sous le nom « Déficit ».</p>
+    <ul>
+      <li><b>Donut</b> : part sombre = frais fixes, part colorée = dépenses prévues, part claire = reste.</li>
+      <li><b>Anneau extérieur</b> : l'écart réel / prévu — <b class="eco">vert</b> si vous êtes sous le budget, <b class="neg">rouge</b> si vous le dépassez.</li>
+      <li><b>Écart réel / prévu</b> : ne compte que les dépenses dont le montant réel a été saisi.</li>
+    </ul>
+  </section>
 
-      <div class="sum" id="sum"></div>
-
-      <div class="tabs" role="tablist">
-        <button role="tab" id="t-fixes" aria-selected="true">Revenus et frais fixes</button>
-        <button role="tab" id="t-plans" aria-selected="false">Dépenses prévues</button>
-        <button role="tab" id="t-year" aria-selected="false">Bilan</button>
-      </div>
-
-      <div id="view"></div>
-    </main>
-  </div>
-
-  <!-- Modal invitation -->
-  <div class="modal-back" id="modal-invite" hidden>
-    <div class="modal">
-      <h2>Inviter quelqu'un</h2>
-      <p class="note">La personne recevra une invitation à sa prochaine connexion et choisira d'accepter ou de refuser.</p>
-      <label class="lbl">E-mail de la personne
-        <input type="email" id="invite-email" placeholder="conjoint@exemple.fr">
-      </label>
-      <label class="lbl">Permissions accordées
-        <select id="invite-permissions">
-          <option value="read">👁️ Lecture seule</option>
-          <option value="write">✏️ Lecture et écriture</option>
-        </select>
-      </label>
-      <p id="invite-error" class="error" hidden></p>
-      <div class="modal-actions">
-        <button class="ghost" id="invite-cancel">Annuler</button>
-        <button id="invite-send">Envoyer l'invitation</button>
-      </div>
+  <section class="box" id="apparence">
+    <h2>🎨 Apparence : un thème par profil</h2>
+    <p>Cliquez sur <b>🎨</b> en haut de l'écran pour ouvrir le panneau d'apparence. Chaque réglage s'applique <b>immédiatement</b> et s'enregistre <b>sur votre profil</b> : vous le retrouvez sur tous vos appareils, et il ne change pas celui des personnes avec qui vous partagez.</p>
+    <div class="pal">
+      <span><i style="background:#C2603A"></i>Chaleureux</span>
+      <span><i style="background:#C98A16"></i>Soleil</span>
+      <span><i style="background:#0B6E6E"></i>Océan</span>
+      <span><i style="background:#2F6B3F"></i>Forêt</span>
+      <span><i style="background:#8E3B6B"></i>Prune</span>
+      <span><i style="background:#3A5A8C"></i>Ardoise</span>
     </div>
-  </div>
+    <ul style="margin-top:10px">
+      <li><b>Palette</b> : six ambiances, du plus chaud (terre cuite, ambre) au plus frais (turquoise, bleu nuit).</li>
+      <li><b>Luminosité</b> : Clair, Sombre, ou Auto (suit votre appareil).</li>
+      <li><b>Couleur d'accent</b> : votre teinte au curseur, ou « Auto » pour celle de la palette.</li>
+      <li><b>Arrondi</b> : des angles francs (0 px) à très doux (22 px).</li>
+      <li><b>Lecture</b> : densité Compact / Normal / Aéré, taille de texte A− / A / A+, contraste renforcé.</li>
+    </ul>
+    <p class="tip">💡 Les couleurs des catégories restent les mêmes dans tous les thèmes, pour que vos repères ne changent pas.</p>
+  </section>
 
-  <!-- Modal invitations reçues -->
-  <div class="modal-back" id="modal-pending" hidden>
-    <div class="modal">
-      <h2>Invitations reçues</h2>
-      <p class="note">Quelqu'un souhaite partager son budget avec vous.</p>
-      <div id="pending-list"></div>
-      <div class="modal-actions">
-        <button class="ghost" id="pending-close">Fermer</button>
-      </div>
-    </div>
-  </div>
+  <section class="box" id="partage">
+    <h2>👥 Partager votre budget</h2>
+    <ol>
+      <li>Ouvrez le <b>menu compte</b> (en haut à gauche) → <b>➕ Inviter quelqu'un</b>.</li>
+      <li>Saisissez son e-mail et choisissez la permission : <span class="badge">👁️ Lecture seule</span> ou <span class="badge">✏️ Lecture et écriture</span>.</li>
+      <li>La personne doit <b>s'être connectée au moins une fois</b> à l'app avec cet e-mail.</li>
+      <li>À sa prochaine connexion, elle voit l'invitation et choisit <b>Accepter</b> ou <b>Refuser</b>.</li>
+    </ol>
+    <p>Les modifications des deux côtés apparaissent <b>en direct</b>, sans recharger. Un bandeau rappelle le mode : <b>🔒 lecture seule</b> ou <b>✏️ écriture</b>.</p>
+    <ul>
+      <li><b>Voir et révoquer les accès</b> : menu compte → « Personnes ayant accès » → ✕.</li>
+      <li><b>Revenir à son propre budget</b> : menu compte → 👤 Mon compte.</li>
+      <li><b>Rompre le lien</b> : la personne invitée clique sur ✕ à côté du compte.</li>
+    </ul>
+    <p class="tip">💡 Pour changer une permission : révoquez l'accès, puis réinvitez avec l'autre permission. Chacun garde son thème et ses réglages de liste.</p>
+  </section>
 
-  <div id="toast" class="toast" hidden></div>
-  <script type="module" src="./app.js"></script>
+  <section class="box" id="pwa">
+    <h2>📱 Installer l'app &amp; hors connexion</h2>
+    <ul>
+      <li><b>Android / Chrome / Edge</b> : bouton <b>⤓ Installer</b>, ou menu ⋮ → « Installer l'application ».</li>
+      <li><b>iPhone / iPad (Safari)</b> : bouton Partager → « Sur l'écran d'accueil ».</li>
+      <li><b>PC</b> : icône d'installation à droite de la barre d'adresse.</li>
+    </ul>
+    <p>Une fois installée, l'app s'ouvre en plein écran et reste <b>consultable hors connexion</b>. L'enregistrement des modifications nécessite une connexion internet.</p>
+  </section>
+
+  <section class="box" id="faq">
+    <h2>🛠️ Questions fréquentes</h2>
+    <details>
+      <summary>Une ligne a été classée dans la mauvaise catégorie ?</summary>
+      <p>Cliquez sur ✎ à droite de la ligne, choisissez la bonne catégorie dans le menu, puis ✓. La correction est immédiate et synchronisée.</p>
+    </details>
+    <details>
+      <summary>Pourquoi je ne vois plus certaines lignes ?</summary>
+      <p>Une pastille de catégorie ou une recherche est active. Cliquez sur « Tous » et videz le champ Rechercher pour tout réafficher ; le total général reste visible sous le total de la sélection.</p>
+    </details>
+    <details>
+      <summary>Comment corriger un revenu ou un montant prévu ?</summary>
+      <p>Avec ✎ directement dans la ligne. Seul le champ « Réel » des dépenses prévues se saisit sans passer par l'édition.</p>
+    </details>
+    <details>
+      <summary>Mon thème ne se retrouve pas sur un autre appareil ?</summary>
+      <p>Connectez-vous avec le même compte : l'apparence est liée au profil. Hors connexion, le dernier thème utilisé s'applique immédiatement.</p>
+    </details>
+    <details>
+      <summary>« Compte introuvable » quand j'envoie une invitation ?</summary>
+      <p>La personne doit d'abord créer son compte et se connecter au moins une fois avec l'e-mail saisi.</p>
+    </details>
+    <details>
+      <summary>Pourquoi je ne peux rien modifier (« Lecture seule ») ?</summary>
+      <p>Vous consultez le budget de quelqu'un avec la permission 👁️. Demandez-lui de vous réinviter avec ✏️ après avoir révoqué l'accès.</p>
+    </details>
+    <details>
+      <summary>J'ai supprimé une ligne par erreur ?</summary>
+      <p>Cliquez sur <b>Annuler</b> dans le message en bas de l'écran : vous avez 5 secondes pour la restaurer à l'identique, catégorie comprise.</p>
+    </details>
+    <details>
+      <summary>Le bilan multiplie-t-il mes revenus chaque mois ?</summary>
+      <p>Oui : revenus et frais fixes sont considérés comme identiques chaque mois, multipliés par le nombre de mois de la période. Seules les dépenses prévues varient.</p>
+    </details>
+    <details>
+      <summary>Où sont stockées mes données ?</summary>
+      <p>Dans votre projet Firebase, rattachées à votre compte, accessibles uniquement à vous et aux personnes liées ayant accepté, selon la permission accordée.</p>
+    </details>
+  </section>
+
+  <p class="foot-back"><a class="btn-back" href="./index.html">← Retour à l'application</a></p>
+</main>
+<script type="module">
+import { initThemeUI, applyPrefs, readCache } from './theme.js';
+applyPrefs(readCache(), { notify: false });
+initThemeUI({ saveHint: 'Enregistré sur cet appareil' });
+</script>
+<script>
+if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
+  navigator.serviceWorker.register('./sw.js').catch(function(){});
+}
+</script>
 </body>
 </html>
