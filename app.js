@@ -505,4 +505,429 @@ function renderYear() {
     if (d.n) { const col = d.gap > 0 ? 'var(--neg)' : (d.gap < 0 ? 'var(--eco)' : 'var(--c3)'); s += rect(cx + 1, Y(fix), bw, fix / mx * H, 'var(--c1)') + rect(cx + 1, Y(fix + d.real), bw, d.real / mx * H, col); }
     s += '<text x="' + cx + '" y="232" text-anchor="middle" font-size="10" fill="var(--muted)">' + MN[x.m - 1] + '</text>';
   });
-  if (inc > 0) s += '<line x1="' + L + '" x2="' + R + '" y1="' + Y(inc) + '" y2="' + Y(
+  if (inc > 0) s += '<line x1="' + L + '" x2="' + R + '" y1="' + Y(inc) + '" y2="' + Y(inc) + '" stroke="var(--ink)" stroke-width="1.5" stroke-dasharray="4 3"/>';
+  s += '</svg>';
+  h += '<section class="box"><h2>Mois par mois</h2><p class="note">Pour chaque mois, la barre de gauche montre le prévu et celle de droite le réel. Le réel ne compte que les dépenses dont vous avez saisi le montant.</p><div class="scroll">' + s + '</div>' +
+    '<div class="lg"><span><i style="background:var(--c1)"></i>Frais</span><span><i style="background:var(--c2)"></i>Prévu</span><span><i style="background:var(--c3)"></i>Réel</span><span><i style="background:var(--neg)"></i>Réel au-dessus du prévu</span><span><i style="background:var(--eco)"></i>Réel sous le prévu</span><span><i class="dash"></i>Revenus</span></div></section>';
+  const rows = ms.map(x => { const d = x.d; return '<tr><td>' + MN[x.m - 1] + '</td><td>' + f(d.pl) + '</td><td>' + (d.n ? f(d.real) : '—') + '</td><td>' + (d.n ? '<span class="' + gcls(d.gap) + '">' + sg(d.gap) + '</span>' : '—') + '</td><td class="' + (inc - fix - d.pl < 0 ? 'neg' : '') + '">' + f(inc - fix - d.pl) + '</td></tr>'; }).join('');
+  h += '<section class="box"><h2>Détail</h2><div class="scroll"><table><thead><tr><th>Mois</th><th>Prévu</th><th>Réel</th><th>Écart</th><th>Reste prévu</th></tr></thead><tbody>' + rows + '</tbody><tfoot><tr><td>Total</td><td>' + f(tPl) + '</td><td>' + (tN ? f(tReal) : '—') + '</td><td>' + (tN ? '<span class="' + gcls(tGap) + '">' + sg(tGap) + '</span>' : '—') + '</td><td class="' + (tRest < 0 ? 'neg' : '') + '">' + f(tRest) + '</td></tr></tfoot></table></div></section>';
+  return h;
+}
+
+/* ---------- rendu : on préserve la saisie en cours (temps réel) ---------- */
+function captureInputs() {
+  const st = { forms: {}, real: null, focus: null };
+  document.querySelectorAll('#view form[data-add]').forEach(fm => {
+    const o = {};
+    ['name', 'amount', 'cat'].forEach(n => { const el = fm.elements[n]; if (el) o[n] = el.value; });
+    st.forms[fm.getAttribute('data-add')] = o;
+  });
+  const ae = document.activeElement;
+  if (ae && ae.dataset && ae.dataset.real) { st.real = { id: ae.dataset.real, value: ae.value }; st.focus = { real: ae.dataset.real }; }
+  else if (ae && ae.form && ae.form.getAttribute && ae.form.getAttribute('data-add') && ae.name)
+    st.focus = { add: ae.form.getAttribute('data-add'), name: ae.name };
+  return st;
+}
+function restoreInputs(st) {
+  Object.keys(st.forms).forEach(k => {
+    const fm = document.querySelector('#view form[data-add="' + k + '"]');
+    if (!fm) return;
+    Object.keys(st.forms[k]).forEach(n => { const el = fm.elements[n]; if (el) el.value = st.forms[k][n]; });
+  });
+  if (st.real) { const el = document.querySelector('#view [data-real="' + st.real.id + '"]'); if (el) el.value = st.real.value; }
+  if (st.focus) {
+    let el = null;
+    if (st.focus.real) el = document.querySelector('#view [data-real="' + st.focus.real + '"]');
+    else { const fm = document.querySelector('#view form[data-add="' + st.focus.add + '"]'); el = fm && fm.elements[st.focus.name]; }
+    if (el) { try { el.focus(); } catch (e) {} }
+  }
+}
+function render() {
+  const st = captureInputs();
+  renderSum();
+  $('#sum').style.display = tab === 'year' ? 'none' : '';
+  $('#prev').parentNode.style.display = tab === 'year' ? 'none' : '';
+  $('#t-fixes').setAttribute('aria-selected', tab === 'fixes');
+  $('#t-plans').setAttribute('aria-selected', tab === 'plans');
+  $('#t-year').setAttribute('aria-selected', tab === 'year');
+  const v = $('#view');
+  v.className = 'tab-' + tab;
+  v.innerHTML = tab === 'fixes'
+    ? listBlock('Revenus', 'income', 'Ex. Salaire', 'Ce qui rentre chaque mois.') + listBlock('Frais', 'fixed', 'Ex. Loyer', 'Ce qui sort chaque mois : loyer, abonnements, assurances…')
+    : tab === 'plans' ? renderPlans() : renderYear();
+  restoreInputs(st);
+}
+
+/* ---------- événements du budget ---------- */
+$('#prev').onclick = () => shift(-1);
+$('#next').onclick = () => shift(1);
+$('#t-fixes').onclick = () => { tab = 'fixes'; render(); };
+$('#t-plans').onclick = () => { tab = 'plans'; render(); };
+$('#t-year').onclick = () => { tab = 'year'; yr = +ym.slice(0, 4); render(); };
+
+const view = $('#view');
+view.addEventListener('click', e => {
+  let b = e.target.closest('[data-yr]');
+  if (b) { yr += +b.getAttribute('data-yr'); render(); return; }
+  b = e.target.closest('[data-preset]');
+  if (b) { const p = b.getAttribute('data-preset').split('-'); pFrom = +p[0]; pTo = +p[1]; render(); }
+});
+view.addEventListener('change', e => {
+  const s = e.target.getAttribute && e.target.getAttribute('data-sel');
+  if (s) {
+    const v = +e.target.value;
+    if (s === 'from') { pFrom = v; if (pTo < v) pTo = v; } else { pTo = v; if (pFrom > v) pFrom = v; }
+    render(); return;
+  }
+  const id = e.target.getAttribute && e.target.getAttribute('data-real');
+  if (id) {
+    if (!store.canWrite) return;
+    const v = e.target.value === '' ? '' : parseFloat(e.target.value);
+    if (v !== '' && isNaN(v)) return;
+    plans().forEach(x => { if (x.id === id) x.real = v; });
+    render();
+    write(() => store.updateItem('plans', id, { real: v }));   // écriture ciblée : un seul champ
+  }
+});
+view.addEventListener('submit', e => {
+  e.preventDefault();
+  if (!store.canWrite) return toast('Lecture seule : ajout impossible');
+  const fm = e.target, k = fm.getAttribute('data-add');
+  const n = fm.elements.name.value.trim(), a = parseFloat(fm.elements.amount.value);
+  if (!n || isNaN(a) || a < 0) return;
+  const id = uid(), ts = Date.now();
+  fm.elements.name.value = ''; fm.elements.amount.value = '';
+  if (k === 'plan') {
+    const cat = fm.elements.cat.value;
+    plans().push({ id, name: n, cat, amount: a, real: '', month: ym, ts });
+    render();
+    write(() => store.addItem('plans', id, { name: n, cat, amount: a, real: '', month: ym, ts }));
+  } else {
+    data[k].push({ id, name: n, amount: a, ts });
+    render();
+    write(() => store.addItem(k, id, { name: n, amount: a, ts }));
+  }
+});
+view.addEventListener('click', e => {
+  const b = e.target.closest('[data-del]');
+  if (b) {
+    if (!store.canWrite) return toast('Lecture seule : suppression impossible');
+    const k = b.getAttribute('data-del'), id = b.getAttribute('data-id');
+    if (k === 'plan') {
+      const arr = plans(), i = arr.findIndex(x => x.id === id);
+      if (i < 0) return;
+      const item = arr[i]; arr.splice(i, 1); render();
+      write(() => store.deleteItem('plans', id));
+      toastUndo('Dépense supprimée', () => {
+        (data.plans[item.month] || (data.plans[item.month] = [])).push(item);
+        render();
+        write(() => store.addItem('plans', item.id, planPayload(item)));
+      });
+    } else {
+      const arr = data[k], i = arr.findIndex(x => x.id === id);
+      if (i < 0) return;
+      const item = arr[i]; arr.splice(i, 1); render();
+      write(() => store.deleteItem(k, id));
+      toastUndo('Ligne supprimée', () => {
+        data[k].push(item); render();
+        write(() => store.addItem(k, item.id, { name: item.name, amount: item.amount, ts: item.ts || Date.now() }));
+      });
+    }
+    return;
+  }
+  if (e.target.id === 'copy') {
+    if (!store.canWrite) return toast('Lecture seule : action impossible');
+    const p = ym.split('-'), d = new Date(+p[0], +p[1] - 2, 1), pk = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+    const src = data.plans[pk] || [];
+    if (!src.length) { alert('Aucune dépense prévue le mois précédent.'); return; }
+    const jobs = [];
+    src.forEach((x, i) => {
+      const id = uid(), ts = Date.now() + i;
+      plans().push({ id, name: x.name, cat: x.cat, amount: x.amount, real: '', month: ym, ts });
+      jobs.push(() => store.addItem('plans', id, { name: x.name, cat: x.cat, amount: x.amount, real: '', month: ym, ts }));
+    });
+    render();
+    write(async () => { for (const j of jobs) await j(); });
+  }
+});
+
+/* ---------- comptes liés + accès accordés ---------- */
+function applyViewMode() {
+  const link = store.currentLink;
+  document.body.classList.toggle('readonly-mode', !!link && link.permissions === 'read');
+  const banner = $('#readonly-banner');
+  if (link) {
+    banner.hidden = false;
+    banner.classList.toggle('write-mode', link.permissions === 'write');
+    $('#readonly-icon').textContent = link.permissions === 'write' ? '✏️' : '🔒';
+    $('#readonly-text').textContent = link.permissions === 'write' ? 'Vous modifiez le compte de' : 'Lecture seule — compte de';
+    $('#readonly-email').textContent = link.ownerEmail;
+  } else banner.hidden = true;
+  $('#current-account-label').textContent = store.isSelf ? 'Mon compte' : store.currentView;
+  document.querySelectorAll('#account-menu [data-view]').forEach(b =>
+    b.classList.toggle('active', b.dataset.view === store.currentView));
+}
+
+function renderAccountMenu() {
+  const list = $('#linked-accounts-list');
+  list.innerHTML = !store.linkedAccounts.length
+    ? '<p class="menu-empty">Aucun compte lié pour le moment.</p>'
+    : store.linkedAccounts.map(l => `
+      <div class="account-row ${store.currentView === l.ownerEmail ? 'active' : ''}">
+        <button class="account-option" data-view="${esc(l.ownerEmail)}" type="button">
+          <span class="account-icon">👥</span>
+          <span class="mail">${esc(l.ownerEmail)}</span>
+          <span class="account-permission">${l.permissions === 'read' ? '👁️ lecture' : '✏️ écriture'}</span>
+        </button>
+        <button class="unlink-btn" data-unlink="${l.id}" title="Rompre le lien" type="button">✕</button>
+      </div>`).join('');
+
+  const block = $('#shared-with-block');
+  block.hidden = !store.isSelf;
+  if (!store.isSelf) return;
+  const rows = [];
+  store.sharedWith.forEach(l => rows.push(`
+    <div class="account-row">
+      <span class="account-option static">
+        <span class="account-icon">👥</span>
+        <span class="mail">${esc(l.linkedEmail)}</span>
+        <span class="account-permission">${l.permissions === 'read' ? '👁️ lecture' : '✏️ écriture'}</span>
+      </span>
+      <button class="unlink-btn" data-revoke="${l.id}" title="Révoquer l'accès" type="button">✕</button>
+    </div>`));
+  store.pendingSent.forEach(i => rows.push(`
+    <div class="account-row">
+      <span class="account-option static">
+        <span class="account-icon">✉️</span>
+        <span class="mail">${esc(i.toEmail)}</span>
+        <span class="account-permission">en attente</span>
+      </span>
+      <button class="unlink-btn" data-cancel="${i.id}" title="Annuler l'invitation" type="button">✕</button>
+    </div>`));
+  $('#shared-with-list').innerHTML = rows.length ? rows.join('') : '<p class="menu-empty">Personne n’a accès à votre budget.</p>';
+}
+
+function openAccountMenu() {
+  renderAccountMenu(); applyViewMode();
+  $('#account-menu').hidden = false;
+  $('#account-btn').classList.add('open');
+  checkPendingInvitations();
+  store.loadSharedWith().then(renderAccountMenu).catch(err => console.warn(err));
+}
+function closeAccountMenu() { $('#account-menu').hidden = true; $('#account-btn').classList.remove('open'); }
+
+$('#account-btn').addEventListener('click', e => {
+  e.stopPropagation();
+  $('#account-menu').hidden ? openAccountMenu() : closeAccountMenu();
+});
+document.addEventListener('click', e => { if (!e.target.closest('.account-switcher')) closeAccountMenu(); });
+
+$('#account-menu').addEventListener('click', async e => {
+  const revoke = e.target.closest('[data-revoke]');
+  if (revoke) {
+    e.stopPropagation();
+    if (!confirm("Révoquer l'accès de cette personne ?")) return;
+    try { await store.removeLink(revoke.dataset.revoke); renderAccountMenu(); toast('Accès révoqué'); }
+    catch (err) { toast(frErr(err)); }
+    return;
+  }
+  const cancel = e.target.closest('[data-cancel]');
+  if (cancel) {
+    e.stopPropagation();
+    try { await store.cancelInvitation(cancel.dataset.cancel); renderAccountMenu(); toast('Invitation annulée'); }
+    catch (err) { toast(frErr(err)); }
+    return;
+  }
+  const unlink = e.target.closest('[data-unlink]');
+  if (unlink) {
+    e.stopPropagation();
+    if (confirm('Rompre le lien avec ce compte ?')) {
+      await store.removeLink(unlink.dataset.unlink);
+      applyViewMode(); renderAccountMenu(); store.openData();
+      toast('Lien supprimé');
+    }
+    return;
+  }
+  const opt = e.target.closest('[data-view]');
+  if (opt) {
+    store.currentView = opt.dataset.view;
+    closeAccountMenu(); applyViewMode();
+    store.openData().catch(err => toast(frErr(err)));
+  }
+});
+
+/* ---------- invitation ---------- */
+$('#invite-btn').addEventListener('click', () => {
+  closeAccountMenu();
+  $('#invite-email').value = '';
+  $('#invite-error').hidden = true;
+  $('#modal-invite').hidden = false;
+});
+$('#invite-cancel').addEventListener('click', () => $('#modal-invite').hidden = true);
+$('#modal-invite').addEventListener('click', e => { if (e.target.id === 'modal-invite') $('#modal-invite').hidden = true; });
+$('#invite-send').addEventListener('click', async () => {
+  const email = $('#invite-email').value.trim(), permissions = $('#invite-permissions').value;
+  const err = $('#invite-error');
+  if (!email || !email.includes('@')) { err.textContent = "Veuillez entrer une adresse e-mail valide."; err.hidden = false; return; }
+  try {
+    await store.sendInvitation(email, permissions);
+    toast(`Invitation envoyée à ${email} ✦`);
+    $('#modal-invite').hidden = true;
+    renderAccountMenu();
+  } catch (e) { err.textContent = frErr(e); err.hidden = false; }
+});
+
+/* ---------- invitations reçues ---------- */
+async function checkPendingInvitations() {
+  try {
+    const pending = await store.getPendingInvitations();
+    if (pending.length) showPendingInvitations(pending);
+  } catch (err) { console.error('Vérification des invitations :', err); }
+}
+function showPendingInvitations(invitations) {
+  const list = $('#pending-list');
+  list.innerHTML = invitations.map(inv => `
+    <div class="pending-item">
+      <div>
+        <div class="pending-email">${esc(inv.fromEmail)}</div>
+        <div class="pending-permission">${inv.permissions === 'read' ? '👁️ Lecture seule' : '✏️ Lecture et écriture'}</div>
+      </div>
+      <div class="pending-actions">
+        <button data-id="${esc(inv.id)}" data-action="accept">Accepter</button>
+        <button class="btn-refuse" data-id="${esc(inv.id)}" data-action="refuse">Refuser</button>
+      </div>
+    </div>`).join('');
+  $('#modal-pending').hidden = false;
+  list.querySelectorAll('button').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const inv = invitations.find(i => i.id === btn.dataset.id);
+      try {
+        await store.respondToInvitation(inv, btn.dataset.action === 'accept');
+        toast(btn.dataset.action === 'accept' ? 'Invitation acceptée ✦' : 'Invitation refusée');
+        btn.closest('.pending-item').remove();
+        if (!list.querySelector('.pending-item')) $('#modal-pending').hidden = true;
+        renderAccountMenu(); applyViewMode();
+      } catch (err) { toast(frErr(err)); }
+    });
+  });
+}
+$('#pending-close').addEventListener('click', () => $('#modal-pending').hidden = true);
+$('#modal-pending').addEventListener('click', e => { if (e.target.id === 'modal-pending') $('#modal-pending').hidden = true; });
+
+/* ---------- authentification ---------- */
+let authMode = 'login';
+document.querySelectorAll('.auth-tabs button').forEach(b => b.addEventListener('click', () => {
+  authMode = b.dataset.mode;
+  document.querySelectorAll('.auth-tabs button').forEach(x => x.classList.toggle('on', x === b));
+  $('#auth-submit').textContent = authMode === 'login' ? 'Se connecter' : 'Créer mon compte';
+  $('#auth-pass').autocomplete = authMode === 'login' ? 'current-password' : 'new-password';
+  $('#auth-error').hidden = true;
+  $('#forgot-btn').hidden = authMode !== 'login';
+}));
+
+$('#auth-form').addEventListener('submit', async e => {
+  e.preventDefault();
+  const email = $('#auth-email').value.trim(), pass = $('#auth-pass').value;
+  const btn = $('#auth-submit'), el = $('#auth-error');
+  btn.disabled = true; btn.textContent = 'Un instant…';
+  try {
+    if (authMode === 'login') await store.login(email, pass);
+    else { await store.register(email, pass); if (USE_FIREBASE) toast('E-mail de vérification envoyé ✦'); }
+    await loadAndEnter();
+    checkPendingInvitations();
+  } catch (err) {
+    el.className = 'error'; el.textContent = frErr(err); el.hidden = false;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = authMode === 'login' ? 'Se connecter' : 'Créer mon compte';
+  }
+});
+
+$('#forgot-btn').addEventListener('click', async () => {
+  const email = $('#auth-email').value.trim(), el = $('#auth-error');
+  el.hidden = false;
+  if (!email) { el.className = 'error'; el.textContent = 'Saisissez votre e-mail ci-dessus, puis cliquez à nouveau.'; return; }
+  try {
+    await store.resetPassword(email);
+    el.className = 'error ok';
+    el.textContent = 'E-mail de réinitialisation envoyé à ' + email + ' (pensez aux spams).';
+  } catch (err) { el.className = 'error'; el.textContent = frErr(err); }
+});
+
+function updateVerifyBanner() {
+  const b = $('#verify-banner');
+  b.hidden = store.verified || !store.user;
+  if (!b.hidden) $('#verify-email').textContent = store.email;
+}
+$('#verify-resend').addEventListener('click', async () => {
+  try { await store.resendVerification(); toast('Lien de vérification renvoyé ✦'); }
+  catch (err) { toast(frErr(err)); }
+});
+$('#verify-done').addEventListener('click', async () => {
+  try {
+    await store.refreshVerification();
+    updateVerifyBanner();
+    toast(store.verified ? 'E-mail vérifié ✦' : "Pas encore vérifié : cliquez le lien reçu par e-mail.");
+  } catch (err) { toast(frErr(err)); }
+});
+
+$('#logout-btn').addEventListener('click', async () => {
+  await store.logout();
+  data = { income: [], fixed: [], plans: {} };
+  tab = 'fixes';
+  $('#view-app').hidden = true;
+  $('#view-auth').hidden = false;
+  $('#auth-form').reset();
+  document.body.classList.remove('readonly-mode');
+  $('#readonly-banner').hidden = true;
+  $('#verify-banner').hidden = true;
+});
+
+/* ---------- cycle de vie ---------- */
+async function loadAndEnter() {
+  $('#user-chip').textContent = store.user.email || '';
+  $('#demo-banner').hidden = USE_FIREBASE;
+  updateVerifyBanner();
+  $('#view-auth').hidden = true;
+  $('#view-app').hidden = false;
+  applyViewMode();
+  renderAccountMenu();
+  try { await store.openData(); } catch (err) { console.error(err); toast(frErr(err)); }
+  store.loadSharedWith().then(renderAccountMenu).catch(() => {});
+}
+
+/* ---------- PWA ---------- */
+let deferredPrompt = null;
+window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); deferredPrompt = e; $('#install-btn').hidden = false; });
+$('#install-btn').addEventListener('click', async () => {
+  if (!deferredPrompt) return;
+  deferredPrompt.prompt();
+  const { outcome } = await deferredPrompt.userChoice;
+  if (outcome === 'accepted') { $('#install-btn').hidden = true; deferredPrompt = null; }
+});
+if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
+  window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch(() => {}));
+}
+
+/* ---------- toast + annulation ---------- */
+let toastTimer;
+function toast(msg) {
+  const t = $('#toast');
+  t.textContent = msg; t.hidden = false;
+  t.classList.remove('show'); void t.offsetWidth; t.classList.add('show');
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.hidden = true, 2600);
+}
+function toastUndo(msg, onUndo) {
+  const t = $('#toast');
+  t.innerHTML = '<span>' + esc(msg) + '</span> <button type="button" class="toast-btn" id="toast-undo">Annuler</button>';
+  t.hidden = false; t.classList.remove('show'); void t.offsetWidth; t.classList.add('show');
+  $('#toast-undo').addEventListener('click', () => { clearTimeout(toastTimer); t.hidden = true; onUndo(); });
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.hidden = true, 5000);
+}
+
+/* ---------- démarrage ---------- */
+(async function boot() {
+  if (!USE_FIREBASE) $('#demo-hint').hidden = false;
+  const u = await store.init();
+  if (u) { loadAndEnter(); checkPendingInvitations(); }
+})();
